@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Album lookup offers only the albums that name the requested album: Lidarr's
+  text search matches on any word, so an unrelated album could be acquired and
+  its artist added to Lidarr. Artist and title are compared without case,
+  accents, punctuation or a trailing edition qualifier, and a candidate lists
+  the wanted tracks the release tracklist holds when Lidarr sends one, so a
+  partial edition is offered as the tracks it actually holds.
+
 ## [0.1.0] - 2026-10-23
 
 ### Added

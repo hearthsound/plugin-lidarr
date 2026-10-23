@@ -596,6 +596,7 @@ mod tests {
                     foreign_album_id: Some(ALBUM.to_string()),
                     artist_id: 9,
                     artist: None,
+                    releases: Vec::new(),
                 }],
                 files: Vec::new(),
                 queue: Vec::new(),
@@ -902,6 +903,35 @@ mod tests {
         );
         assert_eq!(outputs[0].track_index, 0);
         assert_eq!(outputs[1].track_index, 1);
+    }
+
+    #[test]
+    fn completes_when_only_the_listed_files_are_present() {
+        let mut fake = Fake::new();
+        fake.files = fixture_files();
+        let complete = token();
+        let partial = DownloadToken {
+            files: complete.files[..1].to_vec(),
+            ..complete
+        };
+        let files = Files::with(&["Radiohead/Kid A/01 - Everything In Its Right Place.flac"]);
+        let mut state = state(Some(21), Some(0));
+
+        let outcome = advance(
+            &fake,
+            &FixedClock(Some(0)),
+            &config(),
+            &files,
+            &partial,
+            &mut state,
+        )
+        .unwrap();
+
+        let Advance::Complete(outputs) = outcome else {
+            panic!("expected complete, got {outcome:?}");
+        };
+        assert_eq!(outputs.len(), 1);
+        assert_eq!(outputs[0].track_index, 0);
     }
 
     #[test]

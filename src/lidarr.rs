@@ -48,6 +48,36 @@ pub struct Album {
     /// The artist, present on lookup results.
     #[serde(default)]
     pub artist: Option<Artist>,
+    /// The album's releases, present on lookup results.
+    #[serde(default)]
+    pub releases: Vec<Release>,
+}
+
+/// One release of an album as Lidarr reports it.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Release {
+    /// The release title.
+    #[serde(default)]
+    pub title: Option<String>,
+    /// How many tracks the release holds.
+    #[serde(default)]
+    pub track_count: Option<u32>,
+    /// Whether Lidarr monitors this release of the album.
+    #[serde(default)]
+    pub monitored: bool,
+    /// The release's tracklist. Lidarr omits it on most lookup results.
+    #[serde(default)]
+    pub tracks: Vec<ReleaseTrack>,
+}
+
+/// One track of a release as Lidarr reports it.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReleaseTrack {
+    /// The track title.
+    #[serde(default)]
+    pub title: Option<String>,
 }
 
 /// A quality profile as Lidarr reports it.
@@ -298,6 +328,21 @@ mod tests {
         assert_eq!(
             artist.foreign_artist_id.as_deref(),
             Some("a74b1b7f-71a5-4011-9441-d0b5e4122711")
+        );
+    }
+
+    #[test]
+    fn reads_a_lookup_result_with_its_releases() {
+        let albums: Vec<Album> = fixtures::json("lookup_tracks.json");
+        let album = &albums[0];
+
+        assert_eq!(album.releases.len(), 2);
+        assert_eq!(album.releases[0].track_count, Some(13));
+        assert!(album.releases[0].monitored);
+        assert_eq!(album.releases[0].tracks.len(), 13);
+        assert_eq!(
+            album.releases[0].tracks[0].title.as_deref(),
+            Some("Cry Baby")
         );
     }
 

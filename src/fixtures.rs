@@ -21,6 +21,8 @@ use serde::de::DeserializeOwned;
 pub fn text(name: &str) -> &'static str {
     match name {
         "lookup.json" => include_str!("fixtures/lookup.json"),
+        "lookup_melanie.json" => include_str!("fixtures/lookup_melanie.json"),
+        "lookup_tracks.json" => include_str!("fixtures/lookup_tracks.json"),
         "quality_profile.json" => include_str!("fixtures/quality_profile.json"),
         "queue.json" => include_str!("fixtures/queue.json"),
         "track_files.json" => include_str!("fixtures/track_files.json"),

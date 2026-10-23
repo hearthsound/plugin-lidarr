@@ -1,0 +1,241 @@
+[
+  {
+    "id": 0,
+    "title": "Cry Baby",
+    "foreignAlbumId": "85dd3078-58e9-46fc-b1ae-7d3abfde48c3",
+    "artistId": 0,
+    "albumType": "Album",
+    "secondaryTypes": [],
+    "monitored": false,
+    "artist": {
+      "id": 0,
+      "artistName": "Melanie Martinez",
+      "foreignArtistId": "0df563ec-1a79-486e-a46d-5b9862a40311"
+    },
+    "releases": [
+      {
+        "id": 0,
+        "title": "Cry Baby",
+        "foreignReleaseId": "14950b98-17c0-43df-b672-08587fb7a819",
+        "trackCount": 13,
+        "mediumCount": 1,
+        "monitored": true,
+        "tracks": [
+          {
+            "id": 0,
+            "title": "Cry Baby",
+            "trackNumber": "1",
+            "mediumNumber": 1,
+            "duration": 200000
+          },
+          {
+            "id": 1,
+            "title": "Dollhouse",
+            "trackNumber": "2",
+            "mediumNumber": 1,
+            "duration": 200000
+          },
+          {
+            "id": 2,
+            "title": "Sippy Cup",
+            "trackNumber": "3",
+            "mediumNumber": 1,
+            "duration": 200000
+          },
+          {
+            "id": 3,
+            "title": "Carousel",
+            "trackNumber": "4",
+            "mediumNumber": 1,
+            "duration": 200000
+          },
+          {
+            "id": 4,
+            "title": "Alphabet Boy",
+            "trackNumber": "5",
+            "mediumNumber": 1,
+            "duration": 200000
+          },
+          {
+            "id": 5,
+            "title": "Soap",
+            "trackNumber": "6",
+            "mediumNumber": 1,
+            "duration": 200000
+          },
+          {
+            "id": 6,
+            "title": "Training Wheels",
+            "trackNumber": "7",
+            "mediumNumber": 1,
+            "duration": 200000
+          },
+          {
+            "id": 7,
+            "title": "Pity Party",
+            "trackNumber": "8",
+            "mediumNumber": 1,
+            "duration": 200000
+          },
+          {
+            "id": 8,
+            "title": "Tag, You're It",
+            "trackNumber": "9",
+            "mediumNumber": 1,
+            "duration": 200000
+          },
+          {
+            "id": 9,
+            "title": "Milk and Cookies",
+            "trackNumber": "10",
+            "mediumNumber": 1,
+            "duration": 200000
+          },
+          {
+            "id": 10,
+            "title": "Pacify Her",
+            "trackNumber": "11",
+            "mediumNumber": 1,
+            "duration": 200000
+          },
+          {
+            "id": 11,
+            "title": "Mrs. Potato Head",
+            "trackNumber": "12",
+            "mediumNumber": 1,
+            "duration": 200000
+          },
+          {
+            "id": 12,
+            "title": "Play Date",
+            "trackNumber": "13",
+            "mediumNumber": 1,
+            "duration": 200000
+          }
+        ]
+      },
+      {
+        "id": 1,
+        "title": "Cry Baby",
+        "foreignReleaseId": "dd612824-48cf-4fa2-99f8-9f70f291ad35",
+        "trackCount": 16,
+        "mediumCount": 1,
+        "monitored": false,
+        "tracks": [
+          {
+            "id": 0,
+            "title": "Cry Baby",
+            "trackNumber": "1",
+            "mediumNumber": 1,
+            "duration": 200000
+          },
+          {
+            "id": 1,
+            "title": "Dollhouse",
+            "trackNumber": "2",
+            "mediumNumber": 1,
+            "duration": 200000
+          },
+          {
+            "id": 2,
+            "title": "Sippy Cup",
+            "trackNumber": "3",
+            "mediumNumber": 1,
+            "duration": 200000
+          },
+          {
+            "id": 3,
+            "title": "Carousel",
+            "trackNumber": "4",
+            "mediumNumber": 1,
+            "duration": 200000
+          },
+          {
+            "id": 4,
+            "title": "Alphabet Boy",
+            "trackNumber": "5",
+            "mediumNumber": 1,
+            "duration": 200000
+          },
+          {
+            "id": 5,
+            "title": "Soap",
+            "trackNumber": "6",
+            "mediumNumber": 1,
+            "duration": 200000
+          },
+          {
+            "id": 6,
+            "title": "Training Wheels",
+            "trackNumber": "7",
+            "mediumNumber": 1,
+            "duration": 200000
+          },
+          {
+            "id": 7,
+            "title": "Pity Party",
+            "trackNumber": "8",
+            "mediumNumber": 1,
+            "duration": 200000
+          },
+          {
+            "id": 8,
+            "title": "Tag, You're It",
+            "trackNumber": "9",
+            "mediumNumber": 1,
+            "duration": 200000
+          },
+          {
+            "id": 9,
+            "title": "Milk and Cookies",
+            "trackNumber": "10",
+            "mediumNumber": 1,
+            "duration": 200000
+          },
+          {
+            "id": 10,
+            "title": "Pacify Her",
+            "trackNumber": "11",
+            "mediumNumber": 1,
+            "duration": 200000
+          },
+          {
+            "id": 11,
+            "title": "Mrs. Potato Head",
+            "trackNumber": "12",
+            "mediumNumber": 1,
+            "duration": 200000
+          },
+          {
+            "id": 12,
+            "title": "Play Date",
+            "trackNumber": "13",
+            "mediumNumber": 1,
+            "duration": 200000
+          },
+          {
+            "id": 13,
+            "title": "Teddy Bear",
+            "trackNumber": "14",
+            "mediumNumber": 1,
+            "duration": 200000
+          },
+          {
+            "id": 14,
+            "title": "Cake",
+            "trackNumber": "15",
+            "mediumNumber": 1,
+            "duration": 200000
+          },
+          {
+            "id": 15,
+            "title": "Dollhouse (Acoustic)",
+            "trackNumber": "16",
+            "mediumNumber": 1,
+            "duration": 200000
+          }
+        ]
+      }
+    ]
+  }
+]

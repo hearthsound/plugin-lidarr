@@ -1,0 +1,331 @@
+[
+  {
+    "title": "Don’t Cry Baby – Ed Sheeran & Melanie Martinez",
+    "foreignAlbumId": "8a2fbc6a-8d51-495e-b537-7d807a90dd9a",
+    "albumType": "Single",
+    "secondaryTypes": [],
+    "monitored": false,
+    "artistId": 0,
+    "duration": 234627,
+    "mediumCount": 1,
+    "media": [
+      {
+        "mediumNumber": 1,
+        "mediumName": "",
+        "mediumFormat": "Digital Media"
+      }
+    ],
+    "id": 0,
+    "artist": {
+      "artistName": "Quentin Mashups",
+      "foreignArtistId": "29386174-f7c2-4f8d-8e4e-ce0c01e15f2e"
+    },
+    "releases": [
+      {
+        "foreignReleaseId": "bd293f1e-8925-407f-920f-e146186a8099",
+        "title": "Don’t Cry Baby – Ed Sheeran & Melanie Martinez",
+        "status": "Official",
+        "trackCount": 1,
+        "mediumCount": 1,
+        "monitored": true,
+        "format": "Digital Media"
+      }
+    ]
+  },
+  {
+    "title": "The Cry Baby Collection",
+    "foreignAlbumId": "f71f038d-8790-4cd0-a593-8967d222c46b",
+    "albumType": "Album",
+    "secondaryTypes": [],
+    "monitored": false,
+    "artistId": 0,
+    "duration": 24077000,
+    "mediumCount": 1,
+    "media": [
+      {
+        "mediumNumber": 1,
+        "mediumName": "",
+        "mediumFormat": "Digital Media"
+      }
+    ],
+    "id": 0,
+    "artist": {
+      "artistName": "Melanie Martinez",
+      "foreignArtistId": "0df563ec-1a79-486e-a46d-5b9862a40311"
+    },
+    "releases": [
+      {
+        "foreignReleaseId": "01eeada9-029d-48bb-96c4-0cb5ceadcd88",
+        "title": "The Cry Baby Collection",
+        "status": "Bootleg",
+        "trackCount": 128,
+        "mediumCount": 1,
+        "monitored": true,
+        "format": "Digital Media"
+      }
+    ]
+  },
+  {
+    "title": "Cry Baby",
+    "foreignAlbumId": "85dd3078-58e9-46fc-b1ae-7d3abfde48c3",
+    "albumType": "Album",
+    "secondaryTypes": [],
+    "monitored": false,
+    "artistId": 0,
+    "duration": 4387741,
+    "mediumCount": 3,
+    "media": [
+      {
+        "mediumNumber": 1,
+        "mediumName": "Cry Baby",
+        "mediumFormat": "12\" Vinyl"
+      },
+      {
+        "mediumNumber": 2,
+        "mediumName": "Cry Baby",
+        "mediumFormat": "12\" Vinyl"
+      },
+      {
+        "mediumNumber": 3,
+        "mediumName": "Dollhouse EP",
+        "mediumFormat": "12\" Vinyl"
+      }
+    ],
+    "id": 0,
+    "artist": {
+      "artistName": "Melanie Martinez",
+      "foreignArtistId": "0df563ec-1a79-486e-a46d-5b9862a40311"
+    },
+    "releases": [
+      {
+        "foreignReleaseId": "14950b98-17c0-43df-b672-08587fb7a819",
+        "title": "Cry Baby",
+        "status": "Official",
+        "trackCount": 13,
+        "mediumCount": 1,
+        "monitored": false,
+        "format": "CD"
+      },
+      {
+        "foreignReleaseId": "dd612824-48cf-4fa2-99f8-9f70f291ad35",
+        "title": "Cry Baby",
+        "status": "Official",
+        "trackCount": 16,
+        "mediumCount": 1,
+        "monitored": false,
+        "format": "Digital Media"
+      },
+      {
+        "foreignReleaseId": "5b458c76-bfa6-40fc-a1c0-a894da96e5cd",
+        "title": "Cry Baby",
+        "status": "Official",
+        "trackCount": 20,
+        "mediumCount": 3,
+        "monitored": true,
+        "format": "3x12\" Vinyl"
+      }
+    ]
+  },
+  {
+    "title": "Cry Baby’s Extra Clutter EP",
+    "foreignAlbumId": "dd0cb827-8942-4c84-b9e3-bfe4c85e1a3d",
+    "albumType": "EP",
+    "secondaryTypes": [],
+    "monitored": false,
+    "artistId": 0,
+    "duration": 0,
+    "mediumCount": 1,
+    "media": [
+      {
+        "mediumNumber": 1,
+        "mediumName": "",
+        "mediumFormat": "12\" Vinyl"
+      }
+    ],
+    "id": 0,
+    "artist": {
+      "artistName": "Melanie Martinez",
+      "foreignArtistId": "0df563ec-1a79-486e-a46d-5b9862a40311"
+    },
+    "releases": [
+      {
+        "foreignReleaseId": "b8553f6d-14e0-4d39-95ca-e4f442a9ff84",
+        "title": "Cry Baby’s Extra Clutter EP",
+        "status": "Official",
+        "trackCount": 4,
+        "mediumCount": 1,
+        "monitored": true,
+        "format": "12\" Vinyl"
+      }
+    ]
+  },
+  {
+    "title": "Cry for You (Melanie Martinez vs. Selena Gomez feat. A$AP Rocky)",
+    "foreignAlbumId": "b51dea94-ad2a-4b6c-8649-72b9c1445a6e",
+    "albumType": "Single",
+    "secondaryTypes": [],
+    "monitored": false,
+    "artistId": 0,
+    "duration": 219000,
+    "mediumCount": 1,
+    "media": [
+      {
+        "mediumNumber": 1,
+        "mediumName": "",
+        "mediumFormat": "Digital Media"
+      }
+    ],
+    "id": 0,
+    "artist": {
+      "artistName": "oneboredjeu",
+      "foreignArtistId": "03f3241a-b900-43fa-a72c-d9f9901f6dfc"
+    },
+    "releases": [
+      {
+        "foreignReleaseId": "03f1d02a-9acd-4f74-a0b8-adcc10388e55",
+        "title": "Cry for You (Melanie Martinez vs. Selena Gomez feat. A$AP Rocky)",
+        "status": "Official",
+        "trackCount": 1,
+        "mediumCount": 1,
+        "monitored": true,
+        "format": "Digital Media"
+      }
+    ]
+  },
+  {
+    "title": "Born to Cry (Lana Del Rey vs. Melanie Martinez)",
+    "foreignAlbumId": "4172e70c-0a62-4afa-8e92-9041617e6ca9",
+    "albumType": "Single",
+    "secondaryTypes": [],
+    "monitored": false,
+    "artistId": 0,
+    "duration": 259000,
+    "mediumCount": 1,
+    "media": [
+      {
+        "mediumNumber": 1,
+        "mediumName": "",
+        "mediumFormat": "Digital Media"
+      }
+    ],
+    "id": 0,
+    "artist": {
+      "artistName": "oneboredjeu",
+      "foreignArtistId": "03f3241a-b900-43fa-a72c-d9f9901f6dfc"
+    },
+    "releases": [
+      {
+        "foreignReleaseId": "bbccfd19-b8e5-42ad-8888-e59155f6dc29",
+        "title": "Born to Cry (Lana Del Rey vs. Melanie Martinez)",
+        "status": "Official",
+        "trackCount": 1,
+        "mediumCount": 1,
+        "monitored": true,
+        "format": "Digital Media"
+      }
+    ]
+  },
+  {
+    "title": "Melanie Martinez",
+    "foreignAlbumId": "0cb1deda-4d0f-44e9-bd3a-00c14ad8043c",
+    "albumType": "EP",
+    "secondaryTypes": [
+      "Compilation"
+    ],
+    "monitored": false,
+    "artistId": 0,
+    "duration": 0,
+    "mediumCount": 1,
+    "media": [
+      {
+        "mediumNumber": 1,
+        "mediumName": "",
+        "mediumFormat": "CD-R"
+      }
+    ],
+    "id": 0,
+    "artist": {
+      "artistName": "Melanie Martinez",
+      "foreignArtistId": "0df563ec-1a79-486e-a46d-5b9862a40311"
+    },
+    "releases": [
+      {
+        "foreignReleaseId": "5d1c50de-8df6-425e-a264-71848184324a",
+        "title": "Melanie Martinez",
+        "status": "Promotion",
+        "trackCount": 6,
+        "mediumCount": 1,
+        "monitored": true,
+        "format": "CD-R"
+      }
+    ]
+  },
+  {
+    "title": "Melanie Martinez 서울 / Manila / Singapore / 東京",
+    "foreignAlbumId": "010708f6-5646-443f-8e54-f9f86b46e641",
+    "albumType": "Album",
+    "secondaryTypes": [
+      "Compilation"
+    ],
+    "monitored": false,
+    "artistId": 0,
+    "duration": 4820683,
+    "mediumCount": 1,
+    "media": [
+      {
+        "mediumNumber": 1,
+        "mediumName": "",
+        "mediumFormat": "Digital Media"
+      }
+    ],
+    "id": 0,
+    "artist": {
+      "artistName": "Melanie Martinez",
+      "foreignArtistId": "0df563ec-1a79-486e-a46d-5b9862a40311"
+    },
+    "releases": [
+      {
+        "foreignReleaseId": "d19607f9-345d-44e9-b286-d5274ecb9d50",
+        "title": "Melanie Martinez Manila",
+        "status": "Official",
+        "trackCount": 21,
+        "mediumCount": 1,
+        "monitored": true,
+        "format": "Digital Media"
+      }
+    ]
+  },
+  {
+    "title": "Melanie Martinez & Ed Sheeran – Shape of Mrs. Potato Head",
+    "foreignAlbumId": "efcc943b-9982-49d7-ab0e-3f069aa8d355",
+    "albumType": "Single",
+    "secondaryTypes": [],
+    "monitored": false,
+    "artistId": 0,
+    "duration": 245286,
+    "mediumCount": 1,
+    "media": [
+      {
+        "mediumNumber": 1,
+        "mediumName": "",
+        "mediumFormat": "Digital Media"
+      }
+    ],
+    "id": 0,
+    "artist": {
+      "artistName": "Quentin Mashups",
+      "foreignArtistId": "29386174-f7c2-4f8d-8e4e-ce0c01e15f2e"
+    },
+    "releases": [
+      {
+        "foreignReleaseId": "2bb2bbe8-d5ee-4a7c-8e29-36cc9cbd97d0",
+        "title": "Melanie Martinez & Ed Sheeran – Shape of Mrs. Potato Head",
+        "status": "Official",
+        "trackCount": 1,
+        "mediumCount": 1,
+        "monitored": true,
+        "format": "Digital Media"
+      }
+    ]
+  }
+]

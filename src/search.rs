@@ -6,6 +6,12 @@
 //! query carries one. A lookup is synchronous, so the search completes in one
 //! poll and the candidates travel in the search's store entry.
 //!
+//! Lidarr's text search matches on any word, so a lookup for one album can
+//! return unrelated albums that share a word. Only results that name the
+//! requested album, by normalized artist and title, become candidates, and a
+//! candidate's files come from the release tracklist Lidarr sent whenever it
+//! sent one.
+//!
 //! Everything here is pure: it never touches the network, so it is unit-tested
 //! on the host target.
 
@@ -13,6 +19,7 @@ use hearthsound_plugin::acquisition_provider::exports::hearthsound::plugin::acqu
     Candidate, CandidateFile, Query, SourceInfo,
 };
 use hearthsound_plugin::types::ProviderError;
+use unicode_normalization::UnicodeNormalization;
 
 use crate::lidarr;
 use crate::quality;
@@ -22,6 +29,27 @@ pub const SOURCE_KEY: &str = "lidarr";
 
 /// Most lookup results that become candidates.
 pub const MAX_CANDIDATES: usize = 3;
+
+/// Words that mark a trailing bracket group as an edition qualifier.
+///
+/// A qualifier such as `(Deluxe Edition)` or `[Remastered]` names a variant of
+/// the same album, so it is ignored when a lookup result is matched against the
+/// requested album. A group with any other word, such as `(Live)`, stays part of
+/// the title.
+const EDITION_WORDS: [&str; 12] = [
+    "anniversary",
+    "bonus",
+    "collector",
+    "collectors",
+    "deluxe",
+    "edition",
+    "expanded",
+    "limited",
+    "reissue",
+    "remaster",
+    "remastered",
+    "special",
+];
 
 /// The token `start-search` returns.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -207,9 +235,14 @@ where
 ///
 /// # Returns
 ///
-/// At most [`MAX_CANDIDATES`] candidates, in lookup order. A result Lidarr did
-/// not identify by release-group and artist is skipped, because the plugin
-/// cannot add or monitor it later.
+/// At most [`MAX_CANDIDATES`] candidates, in lookup order. A result becomes a
+/// candidate only when its artist equals the query's album artist and its title
+/// equals the query's album title, ignoring case, accents, punctuation and a
+/// trailing edition qualifier; Lidarr's text search matches on any word, so
+/// without that check an unrelated album that shares a word could be acquired
+/// instead. A result Lidarr did not identify by release-group and artist is
+/// skipped, because the plugin cannot add or monitor it later, and so is a
+/// result whose tracklist shares no title with the wanted tracks.
 pub fn candidates(
     query: &Query,
     albums: &[lidarr::Album],
@@ -218,6 +251,7 @@ pub fn candidates(
     albums
         .iter()
         .filter_map(|album| candidate(query, album, mapping))
+        .filter(|candidate| !candidate.files.is_empty())
         .take(MAX_CANDIDATES)
         .collect()
 }
@@ -233,7 +267,7 @@ pub fn candidates(
 /// # Returns
 ///
 /// The candidate, and `None` when the result lacks an album id, an artist id or
-/// a title.
+/// a title, or when it does not name the requested album.
 fn candidate(
     query: &Query,
     album: &lidarr::Album,
@@ -255,6 +289,10 @@ fn candidate(
         return None;
     }
 
+    if !names_the_requested_album(query, &album_title, &artist_name) {
+        return None;
+    }
+
     Some(CandidateToken {
         album_foreign_id,
         album_title,
@@ -262,19 +300,252 @@ fn candidate(
         artist_name,
         format: mapping.format.clone(),
         bitrate_kbps: mapping.bitrate_kbps,
-        files: query
-            .tracks
-            .iter()
-            .enumerate()
-            .map(|(index, track)| WantedFile {
-                index: index as u32,
-                title: track.title.clone(),
-                artists: track.artists.clone(),
-                track_number: track.track_number,
-                duration_ms: track.duration_ms,
-            })
-            .collect(),
+        files: wanted_files(query, album),
     })
+}
+
+/// Reports whether a lookup result names the album the query asks for.
+///
+/// # Parameters
+///
+/// - `query`: the album query.
+/// - `title`: the lookup result's album title.
+/// - `artist`: the lookup result's artist name.
+///
+/// # Returns
+///
+/// `true` when the normalized titles are equal - with a trailing edition
+/// qualifier removed from both - and, when the query names an album artist,
+/// the normalized artist names are equal too.
+fn names_the_requested_album(query: &Query, title: &str, artist: &str) -> bool {
+    let Some(wanted_album) = query.album.as_deref() else {
+        return false;
+    };
+    let wanted_title = normalize(&without_edition(wanted_album));
+
+    if wanted_title.is_empty() || wanted_title != normalize(&without_edition(title)) {
+        return false;
+    }
+
+    match query.album_artist.as_deref().map(normalize) {
+        Some(wanted_artist) if !wanted_artist.is_empty() => wanted_artist == normalize(artist),
+        _ => true,
+    }
+}
+
+/// Lists the files one candidate offers.
+///
+/// # Parameters
+///
+/// - `query`: the album query, whose tracks are the wanted ones.
+/// - `album`: the lookup result.
+///
+/// # Returns
+///
+/// One file per wanted track that also appears by normalized title in the
+/// release tracklist Lidarr sent, in the query's order. A release Lidarr
+/// monitors is preferred because that is the release its search downloads, and
+/// the release with the most tracks is used when none is monitored. Lidarr
+/// usually omits tracklists from lookup results; then a file is listed per
+/// wanted track, because the plugin cannot know which of them the release
+/// holds.
+fn wanted_files(query: &Query, album: &lidarr::Album) -> Vec<WantedFile> {
+    let wanted: Vec<WantedFile> = query
+        .tracks
+        .iter()
+        .enumerate()
+        .map(|(index, track)| WantedFile {
+            index: index as u32,
+            title: track.title.clone(),
+            artists: track.artists.clone(),
+            track_number: track.track_number,
+            duration_ms: track.duration_ms,
+        })
+        .collect();
+
+    let Some(tracks) = tracklist(album) else {
+        return wanted;
+    };
+    let titles: Vec<String> = tracks
+        .iter()
+        .filter_map(|track| track.title.as_deref())
+        .map(normalize)
+        .filter(|title| !title.is_empty())
+        .collect();
+
+    if titles.is_empty() {
+        return wanted;
+    }
+
+    wanted
+        .into_iter()
+        .filter(|file| titles.contains(&normalize(&file.title)))
+        .collect()
+}
+
+/// Returns the tracklist that describes the album, when Lidarr sent one.
+///
+/// # Parameters
+///
+/// - `album`: the lookup result.
+///
+/// # Returns
+///
+/// The tracks of the release Lidarr monitors, or of the release with the most
+/// tracks when none is monitored. `None` when no release carries a tracklist.
+fn tracklist(album: &lidarr::Album) -> Option<&[lidarr::ReleaseTrack]> {
+    let mut best: Option<&lidarr::Release> = None;
+
+    for release in &album.releases {
+        if release.tracks.is_empty() {
+            continue;
+        }
+
+        best = match best {
+            None => Some(release),
+            Some(current) => {
+                let more_complete = (release.monitored, release.tracks.len())
+                    > (current.monitored, current.tracks.len());
+
+                Some(if more_complete { release } else { current })
+            }
+        };
+    }
+
+    best.map(|release| release.tracks.as_slice())
+}
+
+/// Normalizes a name so two spellings of it compare equal.
+///
+/// # Parameters
+///
+/// - `value`: the name to normalize.
+///
+/// # Returns
+///
+/// NFKD-decomposed, lowercase, with combining marks dropped, every
+/// non-alphanumeric character turned into a space, whitespace collapsed and
+/// both ends trimmed.
+///
+/// # Example
+///
+/// ```text
+/// normalize("Cry Baby (Deluxe Edition)") -> "cry baby deluxe edition"
+/// normalize("Beyonc\u{e9}") -> "beyonce"
+/// ```
+pub fn normalize(value: &str) -> String {
+    let mut normalized = String::with_capacity(value.len());
+    let mut pending_space = false;
+
+    for character in value.nfkd() {
+        if unicode_normalization::char::is_combining_mark(character) {
+            continue;
+        }
+
+        for lowered in character.to_lowercase() {
+            if lowered.is_alphanumeric() {
+                if pending_space && !normalized.is_empty() {
+                    normalized.push(' ');
+                }
+                pending_space = false;
+                normalized.push(lowered);
+            } else {
+                pending_space = true;
+            }
+        }
+    }
+
+    normalized
+}
+
+/// Removes a trailing edition qualifier from a title.
+///
+/// # Parameters
+///
+/// - `title`: the album title.
+///
+/// # Returns
+///
+/// The title without its trailing `(...)` or `[...]` groups that name an
+/// edition variant, such as `(Deluxe Edition)` or `[Remastered]`, and unchanged
+/// otherwise.
+///
+/// # Example
+///
+/// ```text
+/// without_edition("Cry Baby (Deluxe Edition)") -> "Cry Baby"
+/// without_edition("Cry Baby (Live)") -> "Cry Baby (Live)"
+/// ```
+pub fn without_edition(title: &str) -> String {
+    let mut value = title.trim();
+
+    while let Some(stripped) = strip_trailing_qualifier(value) {
+        value = stripped.trim_end();
+    }
+
+    value.to_string()
+}
+
+/// Strips one trailing bracket group when it is an edition qualifier.
+///
+/// # Parameters
+///
+/// - `value`: the title, without trailing whitespace.
+///
+/// # Returns
+///
+/// The title before the group, and `None` when the title does not end with a
+/// group naming an edition variant.
+fn strip_trailing_qualifier(value: &str) -> Option<&str> {
+    let trimmed = value.trim_end();
+    let end = trimmed.len();
+    let mut depth = 0usize;
+    let mut opened = None;
+    let mut trailing = None;
+
+    for (offset, character) in trimmed.char_indices() {
+        match character {
+            '(' | '[' => {
+                if depth == 0 {
+                    opened = Some((offset, character));
+                }
+                depth += 1;
+            }
+            ')' | ']' => {
+                depth = depth.saturating_sub(1);
+
+                if depth == 0 {
+                    if offset + character.len_utf8() == end {
+                        trailing = opened;
+                    }
+                    opened = None;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    let (start, opener) = trailing?;
+    let closer = if opener == '(' { ')' } else { ']' };
+    let content = &trimmed[start + opener.len_utf8()..end - closer.len_utf8()];
+
+    is_edition_qualifier(content).then(|| &trimmed[..start])
+}
+
+/// Reports whether a bracket group names an edition variant.
+///
+/// # Parameters
+///
+/// - `content`: the text inside the brackets.
+///
+/// # Returns
+///
+/// `true` when one of its words is an edition word such as `deluxe` or
+/// `remastered`.
+fn is_edition_qualifier(content: &str) -> bool {
+    normalize(content)
+        .split(' ')
+        .any(|word| EDITION_WORDS.contains(&word))
 }
 
 /// Renders a stored candidate as the interface's record.
@@ -287,7 +558,7 @@ fn candidate(
 ///
 /// # Returns
 ///
-/// The candidate record, with one file per wanted track.
+/// The candidate record, with one file per listed track.
 pub fn view(token: &CandidateToken, encoded: String) -> Candidate {
     Candidate {
         token: encoded,
@@ -555,6 +826,139 @@ mod tests {
             )
             .is_empty()
         );
+    }
+
+    fn mapping() -> quality::Mapping {
+        quality::Mapping {
+            format: "flac".to_string(),
+            bitrate_kbps: None,
+        }
+    }
+
+    fn cry_baby_query() -> Query {
+        let titles = [
+            "Cry Baby",
+            "Dollhouse",
+            "Sippy Cup",
+            "Carousel",
+            "Alphabet Boy",
+            "Soap",
+            "Training Wheels",
+            "Pity Party",
+            "Tag, You're It",
+            "Milk and Cookies",
+            "Pacify Her",
+            "Mrs. Potato Head",
+            "Play Date",
+            "Teddy Bear",
+            "Cake",
+            "Dollhouse (Acoustic)",
+        ];
+
+        Query {
+            granularity: Granularity::Album,
+            album: Some("Cry Baby (Deluxe Edition)".to_string()),
+            album_artist: Some("Melanie Martinez".to_string()),
+            year: Some(2015),
+            tracks: titles
+                .iter()
+                .enumerate()
+                .map(|(index, title)| WantedTrack {
+                    title: title.to_string(),
+                    artists: vec!["Melanie Martinez".to_string()],
+                    track_number: Some(index as u16 + 1),
+                    disc_number: Some(1),
+                    duration_ms: Some(200_000),
+                    isrc: None,
+                    ids: Vec::new(),
+                })
+                .collect(),
+            preferred_formats: vec!["flac".to_string()],
+        }
+    }
+
+    #[test]
+    fn offers_only_the_requested_album_from_a_live_lookup() {
+        let albums: Vec<lidarr::Album> = fixtures::json("lookup_melanie.json");
+        let found = candidates(&cry_baby_query(), &albums, &mapping());
+
+        assert_eq!(found.len(), 1);
+        assert_eq!(
+            found[0].album_foreign_id,
+            "85dd3078-58e9-46fc-b1ae-7d3abfde48c3"
+        );
+        assert_eq!(found[0].album_title, "Cry Baby");
+        assert_eq!(found[0].artist_name, "Melanie Martinez");
+        assert_eq!(found[0].files.len(), 16);
+    }
+
+    #[test]
+    fn matches_case_accents_and_edition_qualifiers() {
+        let albums: Vec<lidarr::Album> = fixtures::json("lookup_melanie.json");
+        let mut query = cry_baby_query();
+        query.album = Some("cry baby [deluxe edition]".to_string());
+        query.album_artist = Some("Mel\u{e1}nie Mart\u{ed}nez".to_string());
+
+        assert_eq!(candidates(&query, &albums, &mapping()).len(), 1);
+    }
+
+    #[test]
+    fn lists_the_wanted_tracks_the_monitored_release_holds() {
+        let albums: Vec<lidarr::Album> = fixtures::json("lookup_tracks.json");
+        let found = candidates(&cry_baby_query(), &albums, &mapping());
+
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].files.len(), 13);
+        assert_eq!(found[0].files[0].title, "Cry Baby");
+        assert_eq!(found[0].files[12].title, "Play Date");
+        assert!(found[0].files.iter().all(|file| file.title != "Teddy Bear"));
+    }
+
+    #[test]
+    fn lists_the_deluxe_tracklist_when_lidarr_monitors_it() {
+        let mut albums: Vec<lidarr::Album> = fixtures::json("lookup_tracks.json");
+        albums[0].releases[0].monitored = false;
+        albums[0].releases[1].monitored = true;
+
+        let found = candidates(&cry_baby_query(), &albums, &mapping());
+
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].files.len(), 16);
+        assert_eq!(found[0].files[15].title, "Dollhouse (Acoustic)");
+    }
+
+    #[test]
+    fn drops_a_result_whose_tracklist_shares_no_wanted_title() {
+        let mut albums: Vec<lidarr::Album> = fixtures::json("lookup_tracks.json");
+
+        for release in &mut albums[0].releases {
+            for track in &mut release.tracks {
+                track.title = Some("Something Else".to_string());
+            }
+        }
+
+        assert!(candidates(&cry_baby_query(), &albums, &mapping()).is_empty());
+    }
+
+    #[test]
+    fn normalizes_case_accents_and_punctuation() {
+        assert_eq!(normalize("Beyonc\u{e9}"), "beyonce");
+        assert_eq!(normalize("  Don\u{2019}t  Cry, Baby! "), "don t cry baby");
+        assert_eq!(normalize("AC/DC"), "ac dc");
+        assert_eq!(normalize("---"), "");
+    }
+
+    #[test]
+    fn strips_only_edition_qualifiers_from_a_title() {
+        assert_eq!(without_edition("Cry Baby (Deluxe Edition)"), "Cry Baby");
+        assert_eq!(without_edition("Cry Baby [Remastered]"), "Cry Baby");
+        assert_eq!(without_edition("Cry Baby (2015 Remaster)"), "Cry Baby");
+        assert_eq!(
+            without_edition("Cry Baby (Deluxe Edition) [Remastered]"),
+            "Cry Baby"
+        );
+        assert_eq!(without_edition("Cry Baby (Live)"), "Cry Baby (Live)");
+        assert_eq!(without_edition("Cry Baby"), "Cry Baby");
     }
 
     #[test]

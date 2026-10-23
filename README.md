@@ -98,10 +98,18 @@ status, so a wrong URL or API key is reported when the configuration is saved.
 - An album lookup uses `lidarr:<release-group id>` when the query carries an
   `mb-release-group` id, and `<album artist> <album>` otherwise. Lidarr resolves the
   first exactly, so it does not depend on how closely the text matches.
-- A candidate lists one file per wanted track, named `<NN> - <title>.<ext>`.
-  Lidarr chooses the real file names itself; the candidate name and the format
-  follow the quality profile's cutoff (`FLAC`, `MP3-320`, `AAC-256`, and so on).
-  A cutoff the plugin does not recognize is reported as FLAC.
+- Lidarr's text search matches on any word, so it can return unrelated albums
+  that share one. Only results whose artist and title name the requested album
+  become candidates, compared without case, accents, punctuation or a trailing
+  edition qualifier such as `(Deluxe Edition)`; an album whose title differs
+  otherwise is never offered, so its artist is never added.
+- A candidate lists one file per wanted track that also appears in the release
+  tracklist Lidarr sent, named `<NN> - <title>.<ext>`, so a standard edition
+  offered for a deluxe request lists only the tracks it holds and the server
+  decides whether that is enough. Lidarr omits tracklists from most lookup
+  results; then the candidate lists every wanted track. The format follows the
+  quality profile's cutoff (`FLAC`, `MP3-320`, `AAC-256`, and so on); a cutoff
+  the plugin does not recognize is reported as FLAC.
 - When Lidarr does not hold the album's artist yet, the plugin adds it with
   `addOptions.monitor` `none`, no automatic search and the one album named in
   `albumsToMonitor`. It then monitors that album and posts an `AlbumSearch`
@@ -109,10 +117,11 @@ status, so a wrong URL or API key is reported when the configuration is saved.
 - Lidarr adds a new artist asynchronously, so the album may not be in its
   library on the first call. The plugin looks again on every poll until the
   album appears, and fails only after `searchWaitMinutes`.
-- A download completes only when every wanted track has a track file whose path
+- A download completes only when every listed track has a track file whose path
   is inside `rootFolderPath` and that file is a non-empty regular file in the
-  import root. Files are matched to wanted tracks by their parsed title, then by
-  a title in the file name, then by position when the counts agree.
+  import root. Wanted tracks the candidate did not list are not waited for.
+  Files are matched to listed tracks by their parsed title, then by a title in
+  the file name, then by position when the counts agree.
 - A `downloadFailed` history event for the album, at or after the search, fails
   the acquisition. Older failures are ignored.
 - The `searchWaitMinutes` deadline uses the plugin's system clock, which the
