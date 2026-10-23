@@ -12,6 +12,12 @@
 //! fully imported with nothing in its queue also finishes, so a track the
 //! import root cannot show does not hold the acquisition until it times out.
 //!
+//! Progress mirrors what Lidarr can observe. A poll answers `running` only
+//! while a queue item actively downloads and its byte count advanced since the
+//! previous poll; Lidarr's search and grab, a held or paused item, and its
+//! import phase answer `queued`, because none of them moves bytes the server
+//! could mistake for a stall.
+//!
 //! The sequence is expressed against [`LidarrApi`] and [`Presence`], so the
 //! whole flow is unit-tested against fixtures without a Lidarr instance.
 //!
@@ -52,6 +58,9 @@ pub struct DownloadState {
     /// When the album search was issued, in seconds since the Unix epoch.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub started_at: Option<i64>,
+    /// The bytes the album's queue reported at the previous poll.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_bytes: Option<u64>,
 }
 
 /// One file the plugin reports to the server.
@@ -172,6 +181,7 @@ pub(crate) fn prepare(
         album_id: None,
         artist_id,
         started_at: now,
+        last_bytes: None,
     };
 
     if let Some(album_id) = find_album(api, &candidate.album_foreign_id)? {
@@ -200,6 +210,11 @@ pub(crate) fn prepare(
 /// when Lidarr reports every track of the album imported and its queue holds
 /// nothing for it; the outputs are the files found, each with the wanted
 /// track's index.
+///
+/// Progress answers `running` with the summed byte count only while a queue
+/// item actively downloads and that count advanced since the previous poll.
+/// Lidarr's search and grab, held queue items and its import phase answer
+/// `queued`.
 ///
 /// # Errors
 ///
@@ -284,12 +299,14 @@ pub(crate) fn advance(
         let total: f64 = queue.iter().map(|item| item.size).sum();
         let left: f64 = queue.iter().map(|item| item.sizeleft).sum();
         let bytes = (total - left).max(0.0) as u64;
+        let total_bytes = (total > 0.0).then_some(total as u64);
+        let importing = left <= 0.0 || queue.iter().any(is_importing);
+        let advanced = state.last_bytes.is_none_or(|last| bytes > last);
 
-        if queue.iter().any(is_downloading) {
-            return Ok(Advance::Running {
-                bytes,
-                total_bytes: (total > 0.0).then_some(total as u64),
-            });
+        state.last_bytes = Some(bytes);
+
+        if !importing && bytes > 0 && advanced && queue.iter().any(is_downloading) {
+            return Ok(Advance::Running { bytes, total_bytes });
         }
 
         return Ok(Advance::Queued(Some(queue.len() as u32)));
@@ -414,7 +431,18 @@ fn start(api: &dyn LidarrApi, album_id: u32) -> Result<(), ProviderError> {
     api.search_album(album_id)
 }
 
+/// Queue statuses in which Lidarr holds a download back instead of moving
+/// bytes.
+const HELD_STATES: [&str; 4] = ["queued", "paused", "delay", "downloadClientUnavailable"];
+
+/// Tracked download states in which Lidarr works on the downloaded files.
+const IMPORT_STATES: [&str; 2] = ["importPending", "importing"];
+
 /// Returns whether a queue item is actively downloading.
+///
+/// Lidarr reports the download client's status and its own tracked state; an
+/// item that is held, paused or being imported is not moving bytes even when
+/// one of the two fields still says `downloading`.
 ///
 /// # Parameters
 ///
@@ -422,15 +450,71 @@ fn start(api: &dyn LidarrApi, album_id: u32) -> Result<(), ProviderError> {
 ///
 /// # Returns
 ///
-/// `true` when the download client or Lidarr reports it as downloading.
+/// `true` when one field reports `downloading` and neither field reports a held
+/// or import state.
 fn is_downloading(item: &lidarr::QueueItem) -> bool {
+    let states = [
+        item.status.as_deref(),
+        item.tracked_download_state.as_deref(),
+    ];
+
+    states
+        .iter()
+        .flatten()
+        .any(|state| state.eq_ignore_ascii_case("downloading"))
+        && !states
+            .iter()
+            .flatten()
+            .any(|state| is_held(state) || is_importing_state(state))
+}
+
+/// Returns whether a queue item is being imported.
+///
+/// # Parameters
+///
+/// - `item`: the queue item.
+///
+/// # Returns
+///
+/// `true` when Lidarr's tracked state reports `importPending` or `importing`.
+fn is_importing(item: &lidarr::QueueItem) -> bool {
     [
         item.status.as_deref(),
         item.tracked_download_state.as_deref(),
     ]
     .iter()
     .flatten()
-    .any(|state| state.eq_ignore_ascii_case("downloading"))
+    .any(|state| is_importing_state(state))
+}
+
+/// Reports whether one queue state holds a download back.
+///
+/// # Parameters
+///
+/// - `state`: a queue status or tracked download state.
+///
+/// # Returns
+///
+/// `true` for the statuses in [`HELD_STATES`].
+fn is_held(state: &str) -> bool {
+    HELD_STATES
+        .iter()
+        .any(|held| state.eq_ignore_ascii_case(held))
+}
+
+/// Reports whether one queue state is an import state.
+///
+/// # Parameters
+///
+/// - `state`: a queue status or tracked download state.
+///
+/// # Returns
+///
+/// `true` for the states in [`IMPORT_STATES`].
+fn is_importing_state(state: &str) -> bool {
+    IMPORT_STATES
+        .iter()
+        .any(|import| state.eq_ignore_ascii_case(import))
 }
 
 /// Matches the tracks of Lidarr's album to the listed wanted tracks.
@@ -892,6 +976,22 @@ mod tests {
             album_id,
             artist_id: 9,
             started_at,
+            last_bytes: None,
+        }
+    }
+
+    fn queue_item(
+        status: &str,
+        tracked: Option<&str>,
+        size: f64,
+        sizeleft: f64,
+    ) -> lidarr::QueueItem {
+        lidarr::QueueItem {
+            album_id: Some(21),
+            size,
+            sizeleft,
+            status: Some(status.to_string()),
+            tracked_download_state: tracked.map(str::to_string),
         }
     }
 
@@ -1263,14 +1363,51 @@ mod tests {
     }
 
     #[test]
-    fn reports_a_queued_download() {
+    fn reports_held_queue_states_as_queued() {
+        for held in HELD_STATES {
+            let mut fake = Fake::new();
+            fake.queue = vec![queue_item(held, Some("downloading"), 4096.0, 1024.0)];
+            let mut state = state(Some(21), Some(0));
+
+            let outcome = advance(
+                &fake,
+                &FixedClock(Some(0)),
+                &config(),
+                &Files::with(&[]),
+                &token(),
+                &mut state,
+            )
+            .unwrap();
+
+            assert_eq!(outcome, Advance::Queued(Some(1)), "status {held}");
+        }
+    }
+
+    #[test]
+    fn reports_an_importing_item_as_queued() {
+        for tracked in IMPORT_STATES {
+            let mut fake = Fake::new();
+            fake.queue = vec![queue_item("downloading", Some(tracked), 4096.0, 1024.0)];
+            let mut state = state(Some(21), Some(0));
+
+            let outcome = advance(
+                &fake,
+                &FixedClock(Some(0)),
+                &config(),
+                &Files::with(&[]),
+                &token(),
+                &mut state,
+            )
+            .unwrap();
+
+            assert_eq!(outcome, Advance::Queued(Some(1)), "state {tracked}");
+        }
+    }
+
+    #[test]
+    fn reports_a_finished_transfer_waiting_for_import_as_queued() {
         let mut fake = Fake::new();
-        let mut item: lidarr::QueueItem = fixtures::json::<lidarr::QueuePage>("queue.json")
-            .records
-            .remove(0);
-        item.status = Some("queued".to_string());
-        item.tracked_download_state = None;
-        fake.queue = vec![item];
+        fake.queue = vec![queue_item("downloading", Some("downloading"), 4096.0, 0.0)];
         let mut state = state(Some(21), Some(0));
 
         let outcome = advance(
@@ -1284,6 +1421,84 @@ mod tests {
         .unwrap();
 
         assert_eq!(outcome, Advance::Queued(Some(1)));
+    }
+
+    #[test]
+    fn reports_a_transfer_without_bytes_yet_as_queued() {
+        let mut fake = Fake::new();
+        fake.queue = vec![queue_item(
+            "downloading",
+            Some("downloading"),
+            4096.0,
+            4096.0,
+        )];
+        let mut state = state(Some(21), Some(0));
+
+        let outcome = advance(
+            &fake,
+            &FixedClock(Some(0)),
+            &config(),
+            &Files::with(&[]),
+            &token(),
+            &mut state,
+        )
+        .unwrap();
+
+        assert_eq!(outcome, Advance::Queued(Some(1)));
+    }
+
+    #[test]
+    fn reports_running_only_while_the_byte_count_advances() {
+        let mut fake = Fake::new();
+        fake.queue = fixtures::json::<lidarr::QueuePage>("queue.json").records;
+        let mut state = state(Some(21), Some(0));
+        let files = Files::with(&[]);
+
+        let first = advance(
+            &fake,
+            &FixedClock(Some(0)),
+            &config(),
+            &files,
+            &token(),
+            &mut state,
+        )
+        .unwrap();
+        assert_eq!(
+            first,
+            Advance::Running {
+                bytes: 3072,
+                total_bytes: Some(4096),
+            }
+        );
+
+        let second = advance(
+            &fake,
+            &FixedClock(Some(0)),
+            &config(),
+            &files,
+            &token(),
+            &mut state,
+        )
+        .unwrap();
+        assert_eq!(second, Advance::Queued(Some(1)));
+
+        fake.queue[0].sizeleft = 512.0;
+        let third = advance(
+            &fake,
+            &FixedClock(Some(0)),
+            &config(),
+            &files,
+            &token(),
+            &mut state,
+        )
+        .unwrap();
+        assert_eq!(
+            third,
+            Advance::Running {
+                bytes: 3584,
+                total_bytes: Some(4096),
+            }
+        );
     }
 
     #[test]

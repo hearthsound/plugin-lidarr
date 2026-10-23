@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- A download reports `running` only while a queue item is downloading and its
+  byte count advanced since the previous poll. The album search and grab, queue
+  items that are queued, paused, delayed or unavailable, a finished transfer
+  waiting for its import, and Lidarr's import phase answer `queued`, so the
+  server's stall window no longer counts a phase in which Lidarr moves no bytes.
+
 ## [0.1.1] - 2026-10-23
 
 ### Fixed

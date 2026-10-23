@@ -126,6 +126,11 @@ status, so a wrong URL or API key is reported when the configuration is saved.
   also finishes, so a file the import root cannot show does not hold the
   acquisition until it times out. The reported files are the ones found, each
   with its wanted track's index.
+- Progress mirrors the queue: `running` is answered only while a queue item is
+  downloading and its byte count has advanced since the previous poll. The
+  album search and grab, queue items that are queued, paused, delayed or
+  unavailable, and Lidarr's import phase answer `queued`, so the server's stall
+  window never counts a phase in which Lidarr moves no bytes.
 - A `downloadFailed` history event for the album, at or after the search, fails
   the acquisition. Older failures are ignored.
 - The `searchWaitMinutes` deadline uses the plugin's system clock, which the
