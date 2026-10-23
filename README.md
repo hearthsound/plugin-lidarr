@@ -53,7 +53,7 @@ Then validate the manifest and the component:
 hsplugin check
 ```
 
-It prints `ok: app.hearthsound.lidarr 0.1.0 (provides acquisition)` on success.
+It prints `ok: app.hearthsound.lidarr 0.1.1 (provides acquisition)` on success.
 
 Finally, build the archive you install on a server:
 
@@ -61,7 +61,7 @@ Finally, build the archive you install on a server:
 hsplugin pack --out-dir dist
 ```
 
-`dist/app.hearthsound.lidarr-0.1.0.hsplugin` contains the manifest and the
+`dist/app.hearthsound.lidarr-0.1.1.hsplugin` contains the manifest and the
 component.
 
 ## Tests
