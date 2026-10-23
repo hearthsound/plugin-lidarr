@@ -2,7 +2,7 @@
   "manifestVersion": 1,
   "id": "app.hearthsound.lidarr",
   "name": "Lidarr acquisition",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Acquire albums through a Lidarr instance and import its files.",
   "authors": ["Hearthsound contributors"],
   "license": "MIT OR Apache-2.0",
