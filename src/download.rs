@@ -16,7 +16,7 @@
 use hearthsound_plugin::types::ProviderError;
 
 use crate::api::LidarrApi;
-use crate::clock;
+use crate::clock::{self, Clock};
 use crate::config;
 use crate::lidarr;
 use crate::search::{CandidateToken, WantedFile};
@@ -140,6 +140,7 @@ pub(crate) fn select(
 /// # Parameters
 ///
 /// - `api`: the Lidarr instance.
+/// - `clock`: the source of the current instant.
 /// - `config`: the instance configuration, which names the profiles, the root
 ///   folder and the import root.
 /// - `candidate`: the candidate the server chose.
@@ -156,11 +157,12 @@ pub(crate) fn select(
 /// artist.
 pub(crate) fn prepare(
     api: &dyn LidarrApi,
+    clock: &dyn Clock,
     config: &config::Config,
     candidate: &CandidateToken,
 ) -> Result<DownloadState, ProviderError> {
     let artist_id = ensure_artist(api, config, candidate)?;
-    let now = api.now()?;
+    let now = clock.now();
     let mut state = DownloadState {
         album_id: None,
         artist_id,
@@ -180,6 +182,7 @@ pub(crate) fn prepare(
 /// # Parameters
 ///
 /// - `api`: the Lidarr instance.
+/// - `clock`: the source of the current instant.
 /// - `config`: the instance configuration.
 /// - `presence`: the check for imported files.
 /// - `token`: the download's token.
@@ -195,12 +198,13 @@ pub(crate) fn prepare(
 /// the download is ignored by [`lidarr::has_failed_download`].
 pub(crate) fn advance(
     api: &dyn LidarrApi,
+    clock: &dyn Clock,
     config: &config::Config,
     presence: &dyn Presence,
     token: &DownloadToken,
     state: &mut DownloadState,
 ) -> Result<Advance, ProviderError> {
-    let now = api.now()?;
+    let now = clock.now();
 
     let album_id = match state.album_id {
         Some(album_id) => album_id,
@@ -578,7 +582,6 @@ mod tests {
         files: Vec<lidarr::TrackFile>,
         queue: Vec<lidarr::QueueItem>,
         failed: bool,
-        now: Option<i64>,
         calls: RefCell<Vec<String>>,
         added: RefCell<Option<lidarr::AddArtist>>,
     }
@@ -597,7 +600,6 @@ mod tests {
                 files: Vec::new(),
                 queue: Vec::new(),
                 failed: false,
-                now: Some(100),
                 calls: RefCell::new(Vec::new()),
                 added: RefCell::new(None),
             }
@@ -685,9 +687,13 @@ mod tests {
 
             Ok(self.failed)
         }
+    }
 
-        fn now(&self) -> Result<Option<i64>, ProviderError> {
-            Ok(self.now)
+    struct FixedClock(Option<i64>);
+
+    impl Clock for FixedClock {
+        fn now(&self) -> Option<i64> {
+            self.0
         }
     }
 
@@ -799,7 +805,7 @@ mod tests {
     fn adds_a_missing_artist_then_monitors_and_searches() {
         let fake = Fake::new();
 
-        let state = prepare(&fake, &config(), &candidate()).unwrap();
+        let state = prepare(&fake, &FixedClock(Some(100)), &config(), &candidate()).unwrap();
 
         assert_eq!(state.artist_id, 9);
         assert_eq!(state.album_id, Some(21));
@@ -837,7 +843,7 @@ mod tests {
             root_folder_path: Some("/music".to_string()),
         }];
 
-        let state = prepare(&fake, &config(), &candidate()).unwrap();
+        let state = prepare(&fake, &FixedClock(Some(100)), &config(), &candidate()).unwrap();
 
         assert_eq!(state.artist_id, 3);
         assert!(!fake.calls().contains(&"add_artist".to_string()));
@@ -857,7 +863,7 @@ mod tests {
         let mut fake = Fake::new();
         fake.albums.clear();
 
-        let state = prepare(&fake, &config(), &candidate()).unwrap();
+        let state = prepare(&fake, &FixedClock(Some(100)), &config(), &candidate()).unwrap();
 
         assert_eq!(state.album_id, None);
         assert_eq!(
@@ -876,7 +882,15 @@ mod tests {
         ]);
         let mut state = state(Some(21), Some(0));
 
-        let outcome = advance(&fake, &config(), &files, &token(), &mut state).unwrap();
+        let outcome = advance(
+            &fake,
+            &FixedClock(Some(0)),
+            &config(),
+            &files,
+            &token(),
+            &mut state,
+        )
+        .unwrap();
 
         let Advance::Complete(outputs) = outcome else {
             panic!("expected complete, got {outcome:?}");
@@ -897,7 +911,15 @@ mod tests {
         let files = Files::with(&["Radiohead/Kid A/01 - Everything In Its Right Place.flac"]);
         let mut state = state(Some(21), Some(0));
 
-        let outcome = advance(&fake, &config(), &files, &token(), &mut state).unwrap();
+        let outcome = advance(
+            &fake,
+            &FixedClock(Some(0)),
+            &config(),
+            &files,
+            &token(),
+            &mut state,
+        )
+        .unwrap();
 
         assert_eq!(outcome, Advance::Queued(None));
     }
@@ -909,7 +931,15 @@ mod tests {
         let files = Files::with(&["other/01 - Everything In Its Right Place.flac"]);
         let mut state = state(Some(21), Some(0));
 
-        let outcome = advance(&fake, &config(), &files, &token(), &mut state).unwrap();
+        let outcome = advance(
+            &fake,
+            &FixedClock(Some(0)),
+            &config(),
+            &files,
+            &token(),
+            &mut state,
+        )
+        .unwrap();
 
         assert_eq!(outcome, Advance::Queued(None));
         assert_eq!(
@@ -924,7 +954,15 @@ mod tests {
         fake.failed = true;
         let mut state = state(Some(21), Some(0));
 
-        let outcome = advance(&fake, &config(), &Files::with(&[]), &token(), &mut state).unwrap();
+        let outcome = advance(
+            &fake,
+            &FixedClock(Some(0)),
+            &config(),
+            &Files::with(&[]),
+            &token(),
+            &mut state,
+        )
+        .unwrap();
 
         let Advance::Failed(message) = outcome else {
             panic!("expected failed, got {outcome:?}");
@@ -934,11 +972,18 @@ mod tests {
 
     #[test]
     fn fails_when_no_download_appeared_within_the_wait() {
-        let mut fake = Fake::new();
-        fake.now = Some(1801);
+        let fake = Fake::new();
         let mut state = state(Some(21), Some(0));
 
-        let outcome = advance(&fake, &config(), &Files::with(&[]), &token(), &mut state).unwrap();
+        let outcome = advance(
+            &fake,
+            &FixedClock(Some(1801)),
+            &config(),
+            &Files::with(&[]),
+            &token(),
+            &mut state,
+        )
+        .unwrap();
 
         let Advance::Failed(message) = outcome else {
             panic!("expected failed, got {outcome:?}");
@@ -949,11 +994,18 @@ mod tests {
 
     #[test]
     fn keeps_waiting_before_the_wait_passes() {
-        let mut fake = Fake::new();
-        fake.now = Some(1799);
+        let fake = Fake::new();
         let mut state = state(Some(21), Some(0));
 
-        let outcome = advance(&fake, &config(), &Files::with(&[]), &token(), &mut state).unwrap();
+        let outcome = advance(
+            &fake,
+            &FixedClock(Some(1799)),
+            &config(),
+            &Files::with(&[]),
+            &token(),
+            &mut state,
+        )
+        .unwrap();
 
         assert_eq!(outcome, Advance::Queued(None));
     }
@@ -964,7 +1016,15 @@ mod tests {
         fake.queue = fixtures::json::<lidarr::QueuePage>("queue.json").records;
         let mut state = state(Some(21), Some(0));
 
-        let outcome = advance(&fake, &config(), &Files::with(&[]), &token(), &mut state).unwrap();
+        let outcome = advance(
+            &fake,
+            &FixedClock(Some(0)),
+            &config(),
+            &Files::with(&[]),
+            &token(),
+            &mut state,
+        )
+        .unwrap();
 
         assert_eq!(
             outcome,
@@ -986,7 +1046,15 @@ mod tests {
         fake.queue = vec![item];
         let mut state = state(Some(21), Some(0));
 
-        let outcome = advance(&fake, &config(), &Files::with(&[]), &token(), &mut state).unwrap();
+        let outcome = advance(
+            &fake,
+            &FixedClock(Some(0)),
+            &config(),
+            &Files::with(&[]),
+            &token(),
+            &mut state,
+        )
+        .unwrap();
 
         assert_eq!(outcome, Advance::Queued(Some(1)));
     }
@@ -996,7 +1064,15 @@ mod tests {
         let fake = Fake::new();
         let mut state = state(None, Some(0));
 
-        let outcome = advance(&fake, &config(), &Files::with(&[]), &token(), &mut state).unwrap();
+        let outcome = advance(
+            &fake,
+            &FixedClock(Some(0)),
+            &config(),
+            &Files::with(&[]),
+            &token(),
+            &mut state,
+        )
+        .unwrap();
 
         assert_eq!(state.album_id, Some(21));
         assert_eq!(

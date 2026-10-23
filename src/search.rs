@@ -87,7 +87,7 @@ pub struct WantedFile {
 /// # Returns
 ///
 /// `lidarr:<release-group id>` followed by `<album artist> <album>` when any
-/// wanted track carries an `mb-release` id, and only the text otherwise. The
+/// wanted track carries an `mb-release-group` id, and only the text otherwise. The
 /// plugin stops at the first term that produces a candidate, so the text is the
 /// fallback for an instance whose own lookup does not resolve the id.
 ///
@@ -108,7 +108,7 @@ pub fn terms(query: &Query) -> Result<Vec<String>, ProviderError> {
         .tracks
         .iter()
         .flat_map(|track| &track.ids)
-        .find(|id| id.namespace == "mb-release" && !id.value.trim().is_empty());
+        .find(|id| id.namespace == "mb-release-group" && !id.value.trim().is_empty());
 
     match release_group {
         Some(id) => {
@@ -424,7 +424,7 @@ mod tests {
     fn tries_a_release_group_id_before_the_text() {
         let mut first = track("Everything In Its Right Place", 1);
         first.ids.push(IdPair {
-            namespace: "mb-release".to_string(),
+            namespace: "mb-release-group".to_string(),
             value: "f0f0f0f0-0000-0000-0000-000000000001".to_string(),
         });
 

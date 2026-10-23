@@ -223,7 +223,7 @@ impl AcquisitionGuest for Lidarr {
         }
 
         let client = api::Client::new(&config);
-        let state = download::prepare(&client, &config, &candidate)?;
+        let state = download::prepare(&client, &clock::SystemClock, &config, &candidate)?;
         let token = download::DownloadToken {
             key: random::key(),
             album_foreign_id: candidate.album_foreign_id,
@@ -248,7 +248,14 @@ impl AcquisitionGuest for Lidarr {
         let mut state: download::DownloadState =
             kv::get_json(&download_key(&token.key))?.ok_or(ProviderError::NotFound)?;
         let client = api::Client::new(&config);
-        let outcome = download::advance(&client, &config, &HostPresence, &token, &mut state)?;
+        let outcome = download::advance(
+            &client,
+            &clock::SystemClock,
+            &config,
+            &HostPresence,
+            &token,
+            &mut state,
+        )?;
 
         kv::set_json(&download_key(&token.key), &state, Some(STATE_TTL_MS))?;
 

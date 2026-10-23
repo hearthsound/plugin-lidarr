@@ -14,7 +14,6 @@ use hearthsound_plugin::http;
 use hearthsound_plugin::types::ProviderError;
 use serde::de::DeserializeOwned;
 
-use crate::clock;
 use crate::config;
 use crate::lidarr;
 use crate::url;
@@ -70,12 +69,6 @@ pub(crate) trait LidarrApi {
     /// Reports whether Lidarr recorded a failed download for one album at or
     /// after one instant.
     fn failed_download(&self, album_id: u32, since: Option<i64>) -> Result<bool, ProviderError>;
-
-    /// Reads the instance's current time from the `Date` header of a response.
-    ///
-    /// Returns `None` when the header is absent or unreadable, in which case a
-    /// download has no deadline but otherwise proceeds.
-    fn now(&self) -> Result<Option<i64>, ProviderError>;
 }
 
 /// One Lidarr instance, as this provider instance is configured for it.
@@ -341,15 +334,6 @@ impl LidarrApi for Client {
 
         Ok(lidarr::has_failed_download(&page.records, since))
     }
-
-    fn now(&self) -> Result<Option<i64>, ProviderError> {
-        let response = match self.send(&self.request("GET", "/ping")) {
-            Ok(response) => response,
-            Err(_) => return Ok(None),
-        };
-
-        Ok(date_header(&response))
-    }
 }
 
 /// Decodes a successful response body as JSON.
@@ -394,23 +378,6 @@ fn require_success(response: &Response) -> Result<(), ProviderError> {
     }
 }
 
-/// Reads the `Date` header of a response.
-///
-/// # Parameters
-///
-/// - `response`: the response to read.
-///
-/// # Returns
-///
-/// The instant the header names, in seconds since the Unix epoch.
-fn date_header(response: &Response) -> Option<i64> {
-    response
-        .headers
-        .iter()
-        .find(|(name, _)| name.eq_ignore_ascii_case("date"))
-        .and_then(|(_, value)| clock::parse_http_date(value))
-}
-
 /// Renders a provider error as a sentence for a configuration problem.
 ///
 /// # Parameters
@@ -440,27 +407,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn reads_the_date_header_case_insensitively() {
-        let response = Response {
-            status: 200,
-            headers: vec![(
-                "Date".to_string(),
-                "Thu, 01 Jan 1970 00:01:00 GMT".to_string(),
-            )],
-            body: Vec::new(),
-        };
+    fn describes_a_rejected_key() {
+        let error = ProviderError::Unauthorized("bad key".to_string());
 
-        assert_eq!(date_header(&response), Some(60));
-    }
-
-    #[test]
-    fn ignores_a_response_without_a_date() {
-        let response = Response {
-            status: 200,
-            headers: Vec::new(),
-            body: Vec::new(),
-        };
-
-        assert_eq!(date_header(&response), None);
+        assert!(describe(&error).contains("bad key"));
     }
 }

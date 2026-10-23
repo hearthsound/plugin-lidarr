@@ -96,7 +96,7 @@ status, so a wrong URL or API key is reported when the configuration is saved.
 ## Notes
 
 - An album lookup uses `lidarr:<release-group id>` when the query carries an
-  `mb-release` id, and `<album artist> <album>` otherwise. Lidarr resolves the
+  `mb-release-group` id, and `<album artist> <album>` otherwise. Lidarr resolves the
   first exactly, so it does not depend on how closely the text matches.
 - A candidate lists one file per wanted track, named `<NN> - <title>.<ext>`.
   Lidarr chooses the real file names itself; the candidate name and the format
@@ -115,9 +115,8 @@ status, so a wrong URL or API key is reported when the configuration is saved.
   a title in the file name, then by position when the counts agree.
 - A `downloadFailed` history event for the album, at or after the search, fails
   the acquisition. Older failures are ignored.
-- The plugin reads the current time from the `Date` header Lidarr sends, because
-  it has no clock import. When the header is missing the wait has no deadline,
-  but downloads otherwise proceed.
+- The `searchWaitMinutes` deadline uses the plugin's system clock, which the
+  WASI runtime provides, so it always applies.
 - `cancel-download` forgets the plugin's state and changes nothing in Lidarr:
   the queue item, the download client's transfer and Lidarr's files stay as
   they are.
@@ -129,7 +128,7 @@ status, so a wrong URL or API key is reported when the configuration is saved.
 | `Cargo.toml` | Crate metadata and the SDK dependency. |
 | `src/lib.rs` | The plugin: configuration, lifecycle and the acquisition interface. |
 | `src/api.rs` | The Lidarr HTTP transport and the trait the download logic uses. |
-| `src/clock.rs` | HTTP date and ISO timestamp parsing, and the wait arithmetic. |
+| `src/clock.rs` | The system clock, ISO timestamp parsing, and the wait arithmetic. |
 | `src/config.rs` | The instance configuration and its schema-level checks. |
 | `src/download.rs` | Ensuring the artist, monitoring and searching, polling, and completion. |
 | `src/lidarr.rs` | Serde types for the Lidarr API, and the history failure rule. |

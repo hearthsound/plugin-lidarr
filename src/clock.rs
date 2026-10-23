@@ -1,46 +1,37 @@
 //! Wall-clock reading and timeout arithmetic.
 //!
-//! The plugin has no clock import, so it reads time from the `Date` header
-//! Lidarr sends with every response and from the ISO timestamps in its history
-//! records. Both are UTC, which is all the plugin needs: how long a download
-//! may wait to appear in the queue.
+//! The plugin reads the current time from the system clock, which the WASI
+//! runtime provides to every plugin instance, and it reads history timestamps
+//! from the ISO dates in Lidarr's records. Both are UTC, which is all the
+//! plugin needs: how long a download may wait to appear in the queue.
 //!
-//! Everything here is pure: it never touches the network, so it is unit-tested
-//! on the host target.
+//! The clock is a trait so the download logic can be tested with a fixed
+//! instant. Everything here is pure: it never touches the network, so it is
+//! unit-tested on the host target.
 
-/// Month abbreviations of an HTTP date, in calendar order.
-const MONTHS: [&str; 12] = [
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-];
+use std::time::{SystemTime, UNIX_EPOCH};
 
-/// Parses the `Date` header of an HTTP response.
-///
-/// The preferred (IMF-fixdate) form is `Sun, 06 Nov 1994 08:49:37 GMT`. A
-/// response that carries no date, or a shape this parser does not recognize,
-/// yields `None`; the plugin then simply has no deadline for that download.
-///
-/// # Parameters
-///
-/// - `value`: the header value.
-///
-/// # Returns
-///
-/// The instant, in seconds since the Unix epoch.
-///
-/// # Example
-///
-/// ```text
-/// parse_http_date("Sun, 06 Nov 1994 08:49:37 GMT") -> Some(784111777)
-/// ```
-pub fn parse_http_date(value: &str) -> Option<i64> {
-    let mut parts = value.split_whitespace();
-    let _weekday = parts.next()?;
-    let day: i64 = parts.next()?.parse().ok()?;
-    let month = month(parts.next()?)?;
-    let year: i64 = parts.next()?.parse().ok()?;
-    let (hour, minute, second) = parse_time(parts.next()?)?;
+/// A source of the current instant.
+pub(crate) trait Clock {
+    /// Returns the current instant in seconds since the Unix epoch.
+    ///
+    /// # Returns
+    ///
+    /// The instant, and `None` when the system clock is unavailable or reads a
+    /// time before the epoch.
+    fn now(&self) -> Option<i64>;
+}
 
-    seconds(year, month, day, hour, minute, second)
+/// The system clock.
+pub(crate) struct SystemClock;
+
+impl Clock for SystemClock {
+    fn now(&self) -> Option<i64> {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .ok()
+            .and_then(|elapsed| i64::try_from(elapsed.as_secs()).ok())
+    }
 }
 
 /// Parses an ISO 8601 timestamp in UTC, as Lidarr writes history dates.
@@ -125,22 +116,6 @@ pub fn timed_out(started_at: Option<i64>, now: Option<i64>, wait_minutes: u32) -
     }
 }
 
-/// Returns the month number of an HTTP date's month abbreviation.
-///
-/// # Parameters
-///
-/// - `name`: the three-letter abbreviation.
-///
-/// # Returns
-///
-/// The month number, one-based.
-fn month(name: &str) -> Option<i64> {
-    MONTHS
-        .iter()
-        .position(|candidate| *candidate == name)
-        .map(|index| index as i64 + 1)
-}
-
 /// Parses an `hour:minute:second` time.
 ///
 /// # Parameters
@@ -149,9 +124,8 @@ fn month(name: &str) -> Option<i64> {
 ///
 /// # Returns
 ///
-/// The three components. HTTP dates carry whole seconds and ISO timestamps
-/// carry their fraction separately, so a fraction in the time field is
-/// rejected.
+/// The three components. ISO timestamps carry their fraction separately, so a
+/// fraction in the time field is rejected.
 fn parse_time(value: &str) -> Option<(i64, i64, i64)> {
     let mut parts = value.split(':');
     let hour: i64 = parts.next()?.parse().ok()?;
@@ -208,19 +182,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parses_an_http_date() {
-        assert_eq!(
-            parse_http_date("Sun, 06 Nov 1994 08:49:37 GMT"),
-            Some(784111777)
-        );
-        assert_eq!(parse_http_date("Thu, 01 Jan 1970 00:00:00 GMT"), Some(0));
-    }
+    fn reads_the_system_clock() {
+        let now = SystemClock.now().unwrap();
 
-    #[test]
-    fn rejects_a_malformed_http_date() {
-        assert_eq!(parse_http_date("Sun, 06 Foo 1994 08:49:37 GMT"), None);
-        assert_eq!(parse_http_date("Sun, 06 Nov 1994 08:49 GMT"), None);
-        assert_eq!(parse_http_date(""), None);
+        assert!(now > 1_600_000_000, "{now}");
     }
 
     #[test]
