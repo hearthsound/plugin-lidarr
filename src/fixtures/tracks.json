@@ -1,0 +1,22 @@
+[
+  {
+    "id": 1,
+    "albumId": 21,
+    "artistId": 3,
+    "title": "Everything In Its Right Place",
+    "trackNumber": "1",
+    "mediumNumber": 1,
+    "duration": 240000,
+    "hasFile": false
+  },
+  {
+    "id": 2,
+    "albumId": 21,
+    "artistId": 3,
+    "title": "Kid A",
+    "trackNumber": "2",
+    "mediumNumber": 1,
+    "duration": 200000,
+    "hasFile": false
+  }
+]

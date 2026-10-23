@@ -117,11 +117,15 @@ status, so a wrong URL or API key is reported when the configuration is saved.
 - Lidarr adds a new artist asynchronously, so the album may not be in its
   library on the first call. The plugin looks again on every poll until the
   album appears, and fails only after `searchWaitMinutes`.
-- A download completes only when every listed track has a track file whose path
-  is inside `rootFolderPath` and that file is a non-empty regular file in the
-  import root. Wanted tracks the candidate did not list are not waited for.
-  Files are matched to listed tracks by their parsed title, then by a title in
-  the file name, then by position when the counts agree.
+- A download follows Lidarr's own album state. Once Lidarr lists the album, the
+  plugin reads its tracks and track files: it completes when every album track
+  that maps to a listed wanted track has a file inside `rootFolderPath` that is
+  a non-empty regular file in the import root. A wanted track Lidarr's album
+  does not hold is not waited for; the server fans it out as a track
+  acquisition. An album Lidarr reports fully imported with nothing in its queue
+  also finishes, so a file the import root cannot show does not hold the
+  acquisition until it times out. The reported files are the ones found, each
+  with its wanted track's index.
 - A `downloadFailed` history event for the album, at or after the search, fails
   the acquisition. Older failures are ignored.
 - The `searchWaitMinutes` deadline uses the plugin's system clock, which the

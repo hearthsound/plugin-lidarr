@@ -63,6 +63,9 @@ pub(crate) trait LidarrApi {
     /// Reads the queue items of one album.
     fn queue(&self, album_id: u32) -> Result<Vec<lidarr::QueueItem>, ProviderError>;
 
+    /// Reads the tracks of one album in Lidarr's library.
+    fn tracks(&self, album_id: u32) -> Result<Vec<lidarr::Track>, ProviderError>;
+
     /// Reads the track files Lidarr imported for one album.
     fn track_files(&self, album_id: u32) -> Result<Vec<lidarr::TrackFile>, ProviderError>;
 
@@ -321,6 +324,10 @@ impl LidarrApi for Client {
             .into_iter()
             .filter(|item| item.album_id == Some(album_id))
             .collect())
+    }
+
+    fn tracks(&self, album_id: u32) -> Result<Vec<lidarr::Track>, ProviderError> {
+        self.get_json(&format!("/api/v1/track?albumId={album_id}"))
     }
 
     fn track_files(&self, album_id: u32) -> Result<Vec<lidarr::TrackFile>, ProviderError> {

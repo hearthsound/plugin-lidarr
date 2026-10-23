@@ -7,10 +7,10 @@
 //! `acquisition` at album granularity: the server hands the plugin an album and
 //! its wanted tracks, the plugin looks the album up, makes sure Lidarr has its
 //! artist, monitors the album and asks Lidarr for its search, then reports the
-//! files Lidarr imported once every listed track is present inside the
-//! configured import root. Only lookup results that name the requested album
-//! become candidates, and a candidate lists the wanted tracks the release's own
-//! tracklist holds when Lidarr sent one.
+//! files Lidarr imported once the album's tracks that map to the listed wanted
+//! tracks are present inside the configured import root. Only lookup results
+//! that name the requested album become candidates, and a candidate lists the
+//! wanted tracks the release's own tracklist holds when Lidarr sent one.
 //!
 //! The plugin never deletes or modifies a file Lidarr created, and it never
 //! cancels Lidarr's own queue: `cancel-download` only forgets the plugin's

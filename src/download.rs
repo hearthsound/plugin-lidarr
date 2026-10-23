@@ -3,9 +3,14 @@
 //! Lidarr owns the search, the download client and the import. The plugin's job
 //! is to make the album known to Lidarr - adding its artist when the library
 //! does not have it - monitor the album, ask for its search, and then report
-//! what Lidarr imported. Completion is decided by the files themselves: every
-//! wanted track has a track file at a path Lidarr lists, and that path exists
-//! inside the configured import root.
+//! what Lidarr imported. Completion follows Lidarr's own album state: once the
+//! album is in the library, the plugin reads its tracks and reports every
+//! listed wanted track that Lidarr holds and that is present inside the
+//! configured import root. A wanted track Lidarr's album does not hold - a
+//! standard edition offered for a deluxe request, for example - is not waited
+//! for; the server fans it out as a track acquisition. An album Lidarr reports
+//! fully imported with nothing in its queue also finishes, so a track the
+//! import root cannot show does not hold the acquisition until it times out.
 //!
 //! The sequence is expressed against [`LidarrApi`] and [`Presence`], so the
 //! whole flow is unit-tested against fixtures without a Lidarr instance.
@@ -190,7 +195,11 @@ pub(crate) fn prepare(
 ///
 /// # Returns
 ///
-/// What the poll found.
+/// What the poll found. The download completes when every album track that
+/// maps to a listed wanted track has a file present inside the import root, or
+/// when Lidarr reports every track of the album imported and its queue holds
+/// nothing for it; the outputs are the files found, each with the wanted
+/// track's index.
 ///
 /// # Errors
 ///
@@ -220,14 +229,21 @@ pub(crate) fn advance(
         }
     };
 
+    let tracks = api.tracks(album_id)?;
     let track_files = api.track_files(album_id)?;
-    let matches = match_files(&token.files, &track_files);
+    let matches = match_tracks(&token.files, &tracks);
     let root = config.root_folder();
+    let mut mapped = 0usize;
     let mut present = 0usize;
     let mut outputs = Vec::new();
 
     for (position, wanted) in token.files.iter().enumerate() {
-        let Some(file_index) = matches.get(position).copied().flatten() else {
+        let Some(track_index) = matches.get(position).copied().flatten() else {
+            continue;
+        };
+        mapped += 1;
+
+        let Some(file_index) = track_file(&track_files, &tracks[track_index], wanted) else {
             continue;
         };
         let Some(path) = track_files[file_index].path.as_deref() else {
@@ -246,7 +262,14 @@ pub(crate) fn advance(
         }
     }
 
-    if !token.files.is_empty() && present == token.files.len() {
+    if mapped > 0 && present == mapped {
+        return Ok(Advance::Complete(outputs));
+    }
+
+    let queue = api.queue(album_id)?;
+    let imported = !tracks.is_empty() && tracks.iter().all(|track| track.has_file);
+
+    if imported && queue.is_empty() {
         return Ok(Advance::Complete(outputs));
     }
 
@@ -257,7 +280,6 @@ pub(crate) fn advance(
         )));
     }
 
-    let queue = api.queue(album_id)?;
     if !queue.is_empty() {
         let total: f64 = queue.iter().map(|item| item.size).sum();
         let left: f64 = queue.iter().map(|item| item.sizeleft).sum();
@@ -411,13 +433,93 @@ fn is_downloading(item: &lidarr::QueueItem) -> bool {
     .any(|state| state.eq_ignore_ascii_case("downloading"))
 }
 
+/// Matches the tracks of Lidarr's album to the listed wanted tracks.
+///
+/// Lidarr knows the album's real tracklist, which may hold fewer tracks than
+/// the query wanted: a standard edition offered for a deluxe request holds 13
+/// of 16. The match uses normalized titles, and pairs each wanted track with at
+/// most one album track.
+///
+/// # Parameters
+///
+/// - `wanted`: the listed wanted tracks.
+/// - `tracks`: the tracks of the album in Lidarr's library.
+///
+/// # Returns
+///
+/// For each listed wanted track, the index of its album track, or `None` when
+/// Lidarr's album does not hold it.
+///
+/// # Example
+///
+/// ```text
+/// match_tracks([Kid A], [track "Kid A"]) -> [Some(0)]
+/// ```
+pub(crate) fn match_tracks(wanted: &[WantedFile], tracks: &[lidarr::Track]) -> Vec<Option<usize>> {
+    let mut matches = vec![None; wanted.len()];
+    let mut claimed = vec![false; tracks.len()];
+
+    for (position, wanted) in wanted.iter().enumerate() {
+        let title = normalize(&wanted.title);
+
+        if title.is_empty() {
+            continue;
+        }
+
+        let found = tracks.iter().enumerate().find(|(index, track)| {
+            !claimed[*index]
+                && track
+                    .title
+                    .as_deref()
+                    .is_some_and(|track_title| normalize(track_title) == title)
+        });
+
+        if let Some((index, _)) = found {
+            claimed[index] = true;
+            matches[position] = Some(index);
+        }
+    }
+
+    matches
+}
+
+/// Finds the track file of one album track.
+///
+/// # Parameters
+///
+/// - `files`: the track files Lidarr reported for the album.
+/// - `track`: the album track.
+/// - `wanted`: the listed wanted track the album track holds.
+///
+/// # Returns
+///
+/// The index of the file in `files`: the file the track names, or the file
+/// whose tags or path name the wanted track when the track names none.
+fn track_file(
+    files: &[lidarr::TrackFile],
+    track: &lidarr::Track,
+    wanted: &WantedFile,
+) -> Option<usize> {
+    if let Some(id) = track.track_file_id
+        && let Some(index) = files.iter().position(|file| file.id == id)
+    {
+        return Some(index);
+    }
+
+    match_files(std::slice::from_ref(wanted), files)
+        .first()
+        .copied()
+        .flatten()
+}
+
 /// Matches Lidarr's track files to the wanted tracks.
 ///
 /// Lidarr's track file records do not carry the release-group track index, so
 /// the match uses the tags Lidarr parsed: first an equal title, then a title
 /// found in the file name. When both sides have the same size, the remaining
 /// entries pair up in order, which covers files whose tags Lidarr could not
-/// read.
+/// read. [`advance`] uses this to find the file of an album track that does not
+/// name its file itself.
 ///
 /// # Parameters
 ///
@@ -579,6 +681,7 @@ mod tests {
     struct Fake {
         artists: Vec<lidarr::Artist>,
         albums: Vec<lidarr::Album>,
+        tracks: Vec<lidarr::Track>,
         files: Vec<lidarr::TrackFile>,
         queue: Vec<lidarr::QueueItem>,
         failed: bool,
@@ -598,6 +701,7 @@ mod tests {
                     artist: None,
                     releases: Vec::new(),
                 }],
+                tracks: fixtures::json("tracks.json"),
                 files: Vec::new(),
                 queue: Vec::new(),
                 failed: false,
@@ -671,6 +775,12 @@ mod tests {
             self.call("queue");
 
             Ok(self.queue.clone())
+        }
+
+        fn tracks(&self, _album_id: u32) -> Result<Vec<lidarr::Track>, ProviderError> {
+            self.call("tracks");
+
+            Ok(self.tracks.clone())
         }
 
         fn track_files(&self, _album_id: u32) -> Result<Vec<lidarr::TrackFile>, ProviderError> {
@@ -935,6 +1045,93 @@ mod tests {
     }
 
     #[test]
+    fn returns_only_the_wanted_tracks_lidarr_holds() {
+        let mut fake = Fake::new();
+        fake.tracks.truncate(1);
+        fake.files = fixture_files();
+        let files = Files::with(&["Radiohead/Kid A/01 - Everything In Its Right Place.flac"]);
+        let mut state = state(Some(21), Some(0));
+
+        let outcome = advance(
+            &fake,
+            &FixedClock(Some(0)),
+            &config(),
+            &files,
+            &token(),
+            &mut state,
+        )
+        .unwrap();
+
+        let Advance::Complete(outputs) = outcome else {
+            panic!("expected complete, got {outcome:?}");
+        };
+        assert_eq!(outputs.len(), 1);
+        assert_eq!(outputs[0].track_index, 0);
+        assert_eq!(
+            outputs[0].path,
+            "Radiohead/Kid A/01 - Everything In Its Right Place.flac"
+        );
+    }
+
+    #[test]
+    fn finishes_when_lidarr_reports_the_album_imported() {
+        let mut fake = Fake::new();
+        fake.files = fixture_files();
+
+        for track in &mut fake.tracks {
+            track.has_file = true;
+        }
+
+        let files = Files::with(&["Radiohead/Kid A/01 - Everything In Its Right Place.flac"]);
+        let mut state = state(Some(21), Some(0));
+
+        let outcome = advance(
+            &fake,
+            &FixedClock(Some(0)),
+            &config(),
+            &files,
+            &token(),
+            &mut state,
+        )
+        .unwrap();
+
+        let Advance::Complete(outputs) = outcome else {
+            panic!("expected complete, got {outcome:?}");
+        };
+        assert_eq!(outputs.len(), 1);
+        assert_eq!(outputs[0].track_index, 0);
+    }
+
+    #[test]
+    fn waits_while_the_album_is_still_queued() {
+        let mut fake = Fake::new();
+
+        for track in &mut fake.tracks {
+            track.has_file = true;
+        }
+
+        let mut item: lidarr::QueueItem = fixtures::json::<lidarr::QueuePage>("queue.json")
+            .records
+            .remove(0);
+        item.status = Some("queued".to_string());
+        item.tracked_download_state = None;
+        fake.queue = vec![item];
+        let mut state = state(Some(21), Some(0));
+
+        let outcome = advance(
+            &fake,
+            &FixedClock(Some(0)),
+            &config(),
+            &Files::with(&[]),
+            &token(),
+            &mut state,
+        )
+        .unwrap();
+
+        assert_eq!(outcome, Advance::Queued(Some(1)));
+    }
+
+    #[test]
     fn keeps_waiting_when_one_wanted_file_is_missing() {
         let mut fake = Fake::new();
         fake.files = fixture_files();
@@ -1111,9 +1308,10 @@ mod tests {
                 "albums_by_foreign_id",
                 "monitor_album",
                 "search_album",
+                "tracks",
                 "track_files",
-                "failed_download",
-                "queue"
+                "queue",
+                "failed_download"
             ]
         );
         assert_eq!(outcome, Advance::Queued(None));
@@ -1127,6 +1325,7 @@ mod tests {
         assert_eq!(match_files(&wanted, &files), vec![Some(0), Some(1)]);
 
         let renamed = vec![lidarr::TrackFile {
+            id: 2,
             path: Some("/music/Radiohead/Kid A/02 - Kid A.flac".to_string()),
             size: 2048,
             audio_tags: None,

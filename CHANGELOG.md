@@ -15,6 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   accents, punctuation or a trailing edition qualifier, and a candidate lists
   the wanted tracks the release tracklist holds when Lidarr sends one, so a
   partial edition is offered as the tracks it actually holds.
+- A download finishes with the tracks Lidarr's album actually holds: the plugin
+  reads the album's tracks and track files, waits only for listed tracks Lidarr
+  holds, and reports only the files it finds. A deluxe request that Lidarr
+  satisfies with a standard edition now ends with those tracks instead of
+  waiting out `searchWaitMinutes` for tracks the album does not have.
 
 ## [0.1.0] - 2026-10-23
 

@@ -152,10 +152,31 @@ pub struct QueuePage {
     pub records: Vec<QueueItem>,
 }
 
+/// One track of an album in Lidarr's library.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Track {
+    /// Lidarr's numeric track id.
+    #[serde(default)]
+    pub id: u32,
+    /// The track title.
+    #[serde(default)]
+    pub title: Option<String>,
+    /// Whether Lidarr holds a file for the track.
+    #[serde(default)]
+    pub has_file: bool,
+    /// The track file Lidarr imported, when it holds one.
+    #[serde(default)]
+    pub track_file_id: Option<u32>,
+}
+
 /// One track file Lidarr has imported for an album.
 #[derive(Debug, Clone, Default, PartialEq, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TrackFile {
+    /// Lidarr's numeric file id, which a track names.
+    #[serde(default)]
+    pub id: u32,
     /// The file's path on Lidarr's filesystem.
     #[serde(default)]
     pub path: Option<String>,
@@ -352,6 +373,19 @@ mod tests {
 
         assert_eq!(profile.cutoff, 1);
         assert_eq!(profile.items.len(), 3);
+    }
+
+    #[test]
+    fn reads_the_tracks_of_an_album() {
+        let tracks: Vec<Track> = fixtures::json("tracks.json");
+
+        assert_eq!(tracks.len(), 2);
+        assert_eq!(
+            tracks[0].title.as_deref(),
+            Some("Everything In Its Right Place")
+        );
+        assert!(!tracks[0].has_file);
+        assert_eq!(tracks[0].track_file_id, None);
     }
 
     #[test]

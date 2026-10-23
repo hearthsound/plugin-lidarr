@@ -26,6 +26,7 @@ pub fn text(name: &str) -> &'static str {
         "quality_profile.json" => include_str!("fixtures/quality_profile.json"),
         "queue.json" => include_str!("fixtures/queue.json"),
         "track_files.json" => include_str!("fixtures/track_files.json"),
+        "tracks.json" => include_str!("fixtures/tracks.json"),
         "history_failed.json" => include_str!("fixtures/history_failed.json"),
         other => panic!("unknown fixture {other}"),
     }
