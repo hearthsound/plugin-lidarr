@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-23
+
 ### Added
 
 - The repository scaffolding: the toolchain pin, the dual MIT/Apache-2.0 license
@@ -27,3 +29,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `downloadFailed` history event or when no download appeared within the
   configured wait. Cancelling only forgets the plugin's state and never touches
   Lidarr's queue or files.
+
+[Unreleased]: https://github.com/hearthsound/plugin-lidarr/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/hearthsound/plugin-lidarr/releases/tag/v0.1.0
