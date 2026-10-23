@@ -1,0 +1,16 @@
+{
+  "page": 1,
+  "pageSize": 10,
+  "totalRecords": 1,
+  "records": [
+    {
+      "id": 1,
+      "albumId": 21,
+      "size": 4096.0,
+      "sizeleft": 1024.0,
+      "status": "downloading",
+      "trackedDownloadState": "downloading",
+      "title": "Kid A"
+    }
+  ]
+}

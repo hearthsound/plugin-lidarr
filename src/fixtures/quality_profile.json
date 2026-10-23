@@ -1,0 +1,29 @@
+{
+  "id": 1,
+  "name": "Lossless",
+  "upgradeAllowed": false,
+  "cutoff": 1,
+  "items": [
+    {
+      "id": 0,
+      "name": "FLAC",
+      "quality": { "id": 1, "name": "FLAC" },
+      "items": [],
+      "allowed": true
+    },
+    {
+      "id": 0,
+      "name": "MP3-320",
+      "quality": { "id": 2, "name": "MP3-320" },
+      "items": [],
+      "allowed": false
+    },
+    {
+      "id": 0,
+      "name": "AAC-256",
+      "quality": { "id": 3, "name": "AAC-256" },
+      "items": [],
+      "allowed": false
+    }
+  ]
+}

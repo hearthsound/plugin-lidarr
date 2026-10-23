@@ -1,0 +1,14 @@
+{
+  "page": 1,
+  "pageSize": 10,
+  "totalRecords": 1,
+  "records": [
+    {
+      "id": 9,
+      "albumId": 21,
+      "eventType": "downloadFailed",
+      "date": "2024-05-01T00:00:00.000Z",
+      "sourceTitle": "Kid A"
+    }
+  ]
+}

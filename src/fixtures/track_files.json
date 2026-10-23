@@ -1,0 +1,24 @@
+[
+  {
+    "id": 1,
+    "artistId": 3,
+    "albumId": 21,
+    "path": "/music/Radiohead/Kid A/01 - Everything In Its Right Place.flac",
+    "size": 1024,
+    "audioTags": {
+      "title": "Everything In Its Right Place",
+      "trackNumbers": [1]
+    }
+  },
+  {
+    "id": 2,
+    "artistId": 3,
+    "albumId": 21,
+    "path": "/music/Radiohead/Kid A/02 - Kid A.flac",
+    "size": 2048,
+    "audioTags": {
+      "title": "Kid A",
+      "trackNumbers": [2]
+    }
+  }
+]

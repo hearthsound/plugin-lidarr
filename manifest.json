@@ -1,0 +1,55 @@
+{
+  "manifestVersion": 1,
+  "id": "app.hearthsound.lidarr",
+  "name": "Lidarr acquisition",
+  "version": "0.1.0",
+  "description": "Acquire albums through a Lidarr instance and import its files.",
+  "authors": ["Hearthsound contributors"],
+  "license": "MIT OR Apache-2.0",
+  "homepage": "https://github.com/hearthsound/plugin-lidarr",
+  "api": "hearthsound:plugin@0.3.0",
+  "provides": ["acquisition"],
+  "permissions": {
+    "http": {
+      "hosts": ["$config:url"],
+      "maxBodyBytes": 10485760
+    },
+    "kv": { "maxBytes": 1048576 },
+    "files": { "importRoots": true },
+    "process": { "tools": [] }
+  },
+  "config": {
+    "server": {
+      "schema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "required": ["url", "apiKey", "importRoot", "rootFolderPath"],
+        "properties": {
+          "url": { "type": "string", "format": "uri", "title": "Lidarr base URL", "default": "http://lidarr:8686" },
+          "apiKey": { "type": "string", "title": "Lidarr API key", "writeOnly": true },
+          "importRoot": { "type": "string", "title": "Import root id (the root folder's files, visible to the server)" },
+          "rootFolderPath": { "type": "string", "title": "Root folder path as Lidarr sees it" },
+          "qualityProfileId": { "type": "integer", "minimum": 1, "title": "Quality profile id", "default": 1 },
+          "metadataProfileId": { "type": "integer", "minimum": 1, "title": "Metadata profile id", "default": 1 },
+          "searchWaitMinutes": { "type": "integer", "minimum": 1, "title": "How long to wait for a download to start (minutes)", "default": 30 }
+        }
+      },
+      "uiSchema": {
+        "type": "VerticalLayout",
+        "elements": [
+          { "type": "Control", "scope": "#/properties/url" },
+          { "type": "Control", "scope": "#/properties/apiKey" },
+          { "type": "Control", "scope": "#/properties/importRoot" },
+          { "type": "Control", "scope": "#/properties/rootFolderPath" },
+          { "type": "Group", "label": "Library", "elements": [
+            { "type": "Control", "scope": "#/properties/qualityProfileId" },
+            { "type": "Control", "scope": "#/properties/metadataProfileId" },
+            { "type": "Control", "scope": "#/properties/searchWaitMinutes" }
+          ] }
+        ]
+      }
+    },
+    "user": null
+  },
+  "resources": { "memoryMb": 128, "callTimeoutMs": 30000, "maxInstances": 2 }
+}
