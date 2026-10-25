@@ -12,11 +12,13 @@
 //! fully imported with nothing in its queue also finishes, so a track the
 //! import root cannot show does not hold the acquisition until it times out.
 //!
-//! Progress mirrors what Lidarr can observe. A poll answers `running` only
-//! while a queue item actively downloads and its byte count advanced since the
-//! previous poll; Lidarr's search and grab, a held or paused item, and its
-//! import phase answer `queued`, because none of them moves bytes the server
-//! could mistake for a stall.
+//! Progress mirrors what Lidarr can observe. A poll answers `running` while a
+//! queue item actively downloads and its byte count has moved, so a poll
+//! interval shorter than one chunk cannot report a live download as queued;
+//! Lidarr's search and grab, a held or paused item, and its import phase answer
+//! `queued`, because none of them moves bytes the server could mistake for a
+//! stall. Lidarr's byte count is monotonic, so the server's own stall window
+//! decides when a download stopped moving.
 //!
 //! The sequence is expressed against [`LidarrApi`] and [`Presence`], so the
 //! whole flow is unit-tested against fixtures without a Lidarr instance.
@@ -62,9 +64,6 @@ pub struct DownloadState {
     /// When the album search was issued, in seconds since the Unix epoch.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub started_at: Option<i64>,
-    /// The bytes the album's queue reported at the previous poll.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub last_bytes: Option<u64>,
     /// Whether the plugin set the album's monitored flag, which a cancel
     /// clears again. An album the administrator already monitored stays
     /// monitored.
@@ -190,7 +189,6 @@ pub(crate) fn prepare(
         album_id: None,
         artist_id,
         started_at: now,
-        last_bytes: None,
         monitored_album: false,
     };
 
@@ -221,10 +219,10 @@ pub(crate) fn prepare(
 /// nothing for it; the outputs are the files found, each with the wanted
 /// track's index.
 ///
-/// Progress answers `running` with the summed byte count only while a queue
-/// item actively downloads and that count advanced since the previous poll.
-/// Lidarr's search and grab, held queue items and its import phase answer
-/// `queued`.
+/// Progress answers `running` with the summed byte count while a queue item
+/// actively downloads and bytes have moved, and `queued` for Lidarr's search
+/// and grab, held queue items and its import phase. The byte count never
+/// decreases, so the server's stall window measures a download that stopped.
 ///
 /// # Errors
 ///
@@ -311,11 +309,8 @@ pub(crate) fn advance(
         let bytes = (total - left).max(0.0) as u64;
         let total_bytes = (total > 0.0).then_some(total as u64);
         let importing = left <= 0.0 || queue.iter().any(is_importing);
-        let advanced = state.last_bytes.is_none_or(|last| bytes > last);
 
-        state.last_bytes = Some(bytes);
-
-        if !importing && bytes > 0 && advanced && queue.iter().any(is_downloading) {
+        if !importing && bytes > 0 && queue.iter().any(is_downloading) {
             return Ok(Advance::Running { bytes, total_bytes });
         }
 
@@ -1118,7 +1113,6 @@ mod tests {
             album_id,
             artist_id: 9,
             started_at,
-            last_bytes: None,
             monitored_album: false,
         }
     }
@@ -1608,7 +1602,7 @@ mod tests {
     }
 
     #[test]
-    fn reports_running_only_while_the_byte_count_advances() {
+    fn reports_running_while_a_queue_item_downloads() {
         let mut fake = Fake::new();
         fake.queue = fixtures::json::<lidarr::QueuePage>("queue.json").records;
         let mut state = state(Some(21), Some(0));
@@ -1631,6 +1625,8 @@ mod tests {
             }
         );
 
+        // A poll between two chunks reports the same byte count as the poll
+        // before it; Lidarr is still moving bytes, so the download is running.
         let second = advance(
             &fake,
             &FixedClock(Some(0)),
@@ -1640,7 +1636,7 @@ mod tests {
             &mut state,
         )
         .unwrap();
-        assert_eq!(second, Advance::Queued(Some(1)));
+        assert_eq!(second, first);
 
         fake.queue[0].sizeleft = 512.0;
         let third = advance(

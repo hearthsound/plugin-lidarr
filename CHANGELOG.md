@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- A download reports `running` whenever a queue item is downloading and bytes
+  have moved, instead of only when the byte count advanced since the previous
+  poll. A poll interval shorter than one chunk, or the first poll of a live
+  transfer, no longer answers `queued`, so the server's queue timeout cannot end
+  a download that is moving; a transfer that stops moving is the server's stall
+  window to call.
+
 ### Fixed
 
 - Cancelling an album acquisition undoes what the plugin started in Lidarr: it
