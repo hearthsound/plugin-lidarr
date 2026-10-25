@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the files Lidarr imported are never deleted; an album the administrator had
   already monitored stays monitored, and a queue item that is already gone does
   not keep the album monitored.
+- An artist the plugin adds to Lidarr arrives unmonitored. The artist-level flag
+  decides whether Lidarr monitors the artist's future releases, and a user who
+  asked for one album follows none of them; the album the download wants is
+  monitored explicitly, so the search and the download are unchanged.
 
 ## [0.1.2] - 2026-10-23
 

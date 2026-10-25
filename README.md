@@ -112,10 +112,13 @@ status, so a wrong URL or API key is reported when the configuration is saved.
   results; then the candidate lists every wanted track. The format follows the
   quality profile's cutoff (`FLAC`, `MP3-320`, `AAC-256`, and so on); a cutoff
   the plugin does not recognize is reported as FLAC.
-- When Lidarr does not hold the album's artist yet, the plugin adds it with
-  `addOptions.monitor` `none`, no automatic search and the one album named in
-  `albumsToMonitor`. It then monitors that album and posts an `AlbumSearch`
-  command. An artist Lidarr already holds is never modified.
+- When Lidarr does not hold the album's artist yet, the plugin adds it
+  unmonitored, with `addOptions.monitor` `none`, no automatic search and the one
+  album named in `albumsToMonitor`. The artist-level flag would otherwise have
+  Lidarr monitor every future release of an artist the user asked one album of;
+  the album itself is monitored explicitly, and Lidarr's `AlbumSearch` command
+  does not require the artist to be monitored, so the search and the download
+  are unchanged. An artist Lidarr already holds is never modified.
 - Lidarr adds a new artist asynchronously, so the album may not be in its
   library on the first call. The plugin looks again on every poll until the
   album appears, and fails only after `searchWaitMinutes`.

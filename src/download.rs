@@ -359,6 +359,11 @@ fn waiting(
 
 /// Ensures Lidarr holds the candidate's artist and returns its id.
 ///
+/// An artist the library does not have is added **unmonitored**: the
+/// artist-level flag governs the artist's future releases, and the download
+/// asks for one album, which [`start`] monitors explicitly. Lidarr therefore
+/// never picks up releases of an artist the user did not follow.
+///
 /// # Parameters
 ///
 /// - `api`: the Lidarr instance.
@@ -391,7 +396,14 @@ fn ensure_artist(
         quality_profile_id: config.quality_profile_id,
         metadata_profile_id: config.metadata_profile_id,
         root_folder_path: config.root_folder(),
-        monitored: true,
+        // The artist-level flag decides whether Lidarr monitors the artist's
+        // future releases, and the user follows none of them: they asked for
+        // one album. The album this download wants is monitored explicitly by
+        // [`start`], and Lidarr's `AlbumSearch` command skips its monitored
+        // check for a search that is not monitored-only (Lidarr's
+        // `MonitoredAlbumSpecification`), so an unmonitored artist still gets
+        // the requested album grabbed.
+        monitored: false,
         add_options: lidarr::AddArtistOptions {
             monitor: "none".to_string(),
             albums_to_monitor: vec![candidate.album_foreign_id.clone()],
@@ -1153,7 +1165,7 @@ mod tests {
     }
 
     #[test]
-    fn adds_a_missing_artist_then_monitors_and_searches() {
+    fn adds_a_missing_artist_unmonitored_then_monitors_and_searches() {
         let fake = Fake::new();
 
         let state = prepare(&fake, &FixedClock(Some(100)), &config(), &candidate()).unwrap();
@@ -1179,7 +1191,7 @@ mod tests {
         assert_eq!(added.quality_profile_id, 4);
         assert_eq!(added.metadata_profile_id, 2);
         assert_eq!(added.root_folder_path, "/music");
-        assert!(added.monitored);
+        assert!(!added.monitored);
         assert_eq!(added.add_options.monitor, "none");
         assert_eq!(added.add_options.albums_to_monitor, vec![ALBUM]);
         assert!(!added.add_options.search_for_missing_albums);
