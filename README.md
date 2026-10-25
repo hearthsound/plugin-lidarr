@@ -14,8 +14,10 @@ download client and the import into its root folder; the plugin reads Lidarr's
 API and hands the imported files to the server.
 
 The plugin never deletes, modifies or retags a file Lidarr created, and it never
-cancels Lidarr's queue. Cancelling an acquisition only forgets the plugin's own
-state.
+deletes an artist or an album from Lidarr's library. Cancelling an acquisition
+undoes what the plugin started in Lidarr: it removes the album's queue items
+with the download client's copy, so an in-flight transfer stops, and clears the
+album's monitored flag when the plugin set it.
 
 ## Requirements
 
@@ -135,9 +137,13 @@ status, so a wrong URL or API key is reported when the configuration is saved.
   the acquisition. Older failures are ignored.
 - The `searchWaitMinutes` deadline uses the plugin's system clock, which the
   WASI runtime provides, so it always applies.
-- `cancel-download` forgets the plugin's state and changes nothing in Lidarr:
-  the queue item, the download client's transfer and Lidarr's files stay as
-  they are.
+- `cancel-download` removes the album's queue items with
+  `removeFromClient=true`, so Lidarr drops the download and the download
+  client's copy, and clears the album's monitored flag when the plugin set it.
+  An album the administrator had already monitored stays monitored, a queue
+  item that is already gone does not keep the album monitored, and Lidarr's
+  files, albums and artist are never deleted. The cancel is best effort: a
+  failure is logged and the plugin's own state is dropped either way.
 
 ## Layout
 

@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Cancelling an album acquisition undoes what the plugin started in Lidarr: it
+  removes the album's queue items with the download client's copy, so an
+  in-flight transfer stops, and clears the album's monitored flag when the
+  plugin set it. Previously only the plugin's own state was dropped, so the
+  queue item kept downloading and the album stayed monitored. The artist and
+  the files Lidarr imported are never deleted; an album the administrator had
+  already monitored stays monitored, and a queue item that is already gone does
+  not keep the album monitored.
+
 ## [0.1.2] - 2026-10-23
 
 ### Fixed

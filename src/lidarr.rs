@@ -126,6 +126,9 @@ pub struct Quality {
 #[derive(Debug, Clone, Default, PartialEq, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct QueueItem {
+    /// Lidarr's numeric id of the queue item, which names it to the queue API.
+    #[serde(default)]
+    pub id: u32,
     /// The album the item belongs to.
     #[serde(default)]
     pub album_id: Option<u32>,
@@ -392,6 +395,7 @@ mod tests {
     fn reads_queue_track_files_and_history_pages() {
         let queue: QueuePage = fixtures::json("queue.json");
         assert_eq!(queue.records.len(), 1);
+        assert_eq!(queue.records[0].id, 1);
         assert_eq!(queue.records[0].album_id, Some(21));
         assert_eq!(queue.records[0].status.as_deref(), Some("downloading"));
 

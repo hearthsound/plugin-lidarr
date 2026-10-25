@@ -21,8 +21,12 @@
 //! The sequence is expressed against [`LidarrApi`] and [`Presence`], so the
 //! whole flow is unit-tested against fixtures without a Lidarr instance.
 //!
-//! The plugin never deletes or modifies a file Lidarr created: cancelling a
-//! download only forgets the plugin's own state.
+//! The plugin never deletes or modifies a file Lidarr created, and it never
+//! deletes an artist or an album from Lidarr's library. Cancelling a download
+//! undoes what the plugin itself started: it removes the queue items the album
+//! has - with the download client's copy, so the transfer stops - and clears
+//! the monitored flag of the album when the plugin set it, leaving the files
+//! Lidarr imported and every album the administrator follows alone.
 
 use hearthsound_plugin::types::ProviderError;
 
@@ -61,6 +65,11 @@ pub struct DownloadState {
     /// The bytes the album's queue reported at the previous poll.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_bytes: Option<u64>,
+    /// Whether the plugin set the album's monitored flag, which a cancel
+    /// clears again. An album the administrator already monitored stays
+    /// monitored.
+    #[serde(default)]
+    pub monitored_album: bool,
 }
 
 /// One file the plugin reports to the server.
@@ -182,10 +191,11 @@ pub(crate) fn prepare(
         artist_id,
         started_at: now,
         last_bytes: None,
+        monitored_album: false,
     };
 
     if let Some(album_id) = find_album(api, &candidate.album_foreign_id)? {
-        start(api, album_id)?;
+        start(api, album_id, &mut state)?;
         state.album_id = Some(album_id);
     }
 
@@ -237,7 +247,7 @@ pub(crate) fn advance(
                 return Ok(waiting(config, state.started_at, now, "list the album"));
             };
 
-            start(api, album_id)?;
+            start(api, album_id, state)?;
             state.album_id = Some(album_id);
             state.started_at = now.or(state.started_at);
             album_id
@@ -415,20 +425,98 @@ fn find_album(api: &dyn LidarrApi, foreign_id: &str) -> Result<Option<u32>, Prov
         .map(|album| album.id))
 }
 
-/// Monitors one album and asks Lidarr to search for it.
+/// Monitors one album, records that the plugin did so, and asks Lidarr to
+/// search for it.
 ///
 /// # Parameters
 ///
 /// - `api`: the Lidarr instance.
 /// - `album_id`: Lidarr's id of the album.
+/// - `state`: the download's state, which records that the plugin set the
+///   album's monitored flag so a cancel can clear it again.
 ///
 /// # Errors
 ///
 /// Returns the mapped error of a failed request.
-fn start(api: &dyn LidarrApi, album_id: u32) -> Result<(), ProviderError> {
+fn start(
+    api: &dyn LidarrApi,
+    album_id: u32,
+    state: &mut DownloadState,
+) -> Result<(), ProviderError> {
     api.monitor_album(album_id)?;
+    state.monitored_album = true;
 
     api.search_album(album_id)
+}
+
+/// Cancels one download in Lidarr.
+///
+/// Undoes what the plugin started and nothing else: every queue item of the
+/// album is removed with the download client's copy, which stops a transfer in
+/// flight, and the album's monitored flag is cleared when the plugin set it.
+/// The album, the artist and the files Lidarr imported stay.
+///
+/// # Parameters
+///
+/// - `api`: the Lidarr instance.
+/// - `state`: the download's state, or `None` when the store no longer holds
+///   one, which makes the cancel a no-op.
+/// - `token`: the download's token, which names the album when the state was
+///   stored before Lidarr listed it.
+///
+/// # Returns
+///
+/// `Ok(())` once Lidarr has been asked to drop the queue items and the
+/// monitored flag, including when there is nothing to undo.
+///
+/// # Errors
+///
+/// Returns the first error the instance reported. Every other step is still
+/// attempted, because a queue item that vanished (a `404`) must not leave the
+/// album monitored.
+pub(crate) fn cancel(
+    api: &dyn LidarrApi,
+    state: Option<&DownloadState>,
+    token: &DownloadToken,
+) -> Result<(), ProviderError> {
+    let Some(state) = state else {
+        return Ok(());
+    };
+
+    let album_id = match state.album_id {
+        Some(album_id) => Some(album_id),
+        None => find_album(api, &token.album_foreign_id)?,
+    };
+    let Some(album_id) = album_id else {
+        return Ok(());
+    };
+
+    let mut failure = None;
+    let items = match api.queue(album_id) {
+        Ok(items) => items,
+        Err(error) => {
+            failure = Some(error);
+
+            Vec::new()
+        }
+    };
+
+    for item in items {
+        if let Err(error) = api.remove_queue_item(item.id, true) {
+            failure = failure.or(Some(error));
+        }
+    }
+
+    if state.monitored_album
+        && let Err(error) = api.unmonitor_album(album_id)
+    {
+        failure = failure.or(Some(error));
+    }
+
+    match failure {
+        Some(error) => Err(error),
+        None => Ok(()),
+    }
 }
 
 /// Queue statuses in which Lidarr holds a download back instead of moving
@@ -769,8 +857,12 @@ mod tests {
         files: Vec<lidarr::TrackFile>,
         queue: Vec<lidarr::QueueItem>,
         failed: bool,
+        fail_queue_removal: bool,
+        fail_unmonitor: bool,
         calls: RefCell<Vec<String>>,
         added: RefCell<Option<lidarr::AddArtist>>,
+        removed: RefCell<Vec<(u32, bool)>>,
+        unmonitored: RefCell<Vec<u32>>,
     }
 
     impl Fake {
@@ -789,8 +881,12 @@ mod tests {
                 files: Vec::new(),
                 queue: Vec::new(),
                 failed: false,
+                fail_queue_removal: false,
+                fail_unmonitor: false,
                 calls: RefCell::new(Vec::new()),
                 added: RefCell::new(None),
+                removed: RefCell::new(Vec::new()),
+                unmonitored: RefCell::new(Vec::new()),
             }
         }
 
@@ -800,6 +896,14 @@ mod tests {
 
         fn calls(&self) -> Vec<String> {
             self.calls.borrow().clone()
+        }
+
+        fn removed(&self) -> Vec<(u32, bool)> {
+            self.removed.borrow().clone()
+        }
+
+        fn unmonitored(&self) -> Vec<u32> {
+            self.unmonitored.borrow().clone()
         }
     }
 
@@ -859,6 +963,32 @@ mod tests {
             self.call("queue");
 
             Ok(self.queue.clone())
+        }
+
+        fn remove_queue_item(
+            &self,
+            id: u32,
+            remove_from_client: bool,
+        ) -> Result<(), ProviderError> {
+            self.call("remove_queue_item");
+            self.removed.borrow_mut().push((id, remove_from_client));
+
+            if self.fail_queue_removal {
+                return Err(ProviderError::NotFound);
+            }
+
+            Ok(())
+        }
+
+        fn unmonitor_album(&self, album_id: u32) -> Result<(), ProviderError> {
+            self.call("unmonitor_album");
+            self.unmonitored.borrow_mut().push(album_id);
+
+            if self.fail_unmonitor {
+                return Err(ProviderError::Unavailable("queue busy".to_string()));
+            }
+
+            Ok(())
         }
 
         fn tracks(&self, _album_id: u32) -> Result<Vec<lidarr::Track>, ProviderError> {
@@ -977,16 +1107,26 @@ mod tests {
             artist_id: 9,
             started_at,
             last_bytes: None,
+            monitored_album: false,
+        }
+    }
+
+    fn monitored_state() -> DownloadState {
+        DownloadState {
+            monitored_album: true,
+            ..state(Some(21), Some(0))
         }
     }
 
     fn queue_item(
+        id: u32,
         status: &str,
         tracked: Option<&str>,
         size: f64,
         sizeleft: f64,
     ) -> lidarr::QueueItem {
         lidarr::QueueItem {
+            id,
             album_id: Some(21),
             size,
             sizeleft,
@@ -1021,6 +1161,7 @@ mod tests {
         assert_eq!(state.artist_id, 9);
         assert_eq!(state.album_id, Some(21));
         assert_eq!(state.started_at, Some(100));
+        assert!(state.monitored_album);
         assert_eq!(
             fake.calls(),
             vec![
@@ -1366,7 +1507,7 @@ mod tests {
     fn reports_held_queue_states_as_queued() {
         for held in HELD_STATES {
             let mut fake = Fake::new();
-            fake.queue = vec![queue_item(held, Some("downloading"), 4096.0, 1024.0)];
+            fake.queue = vec![queue_item(1, held, Some("downloading"), 4096.0, 1024.0)];
             let mut state = state(Some(21), Some(0));
 
             let outcome = advance(
@@ -1387,7 +1528,7 @@ mod tests {
     fn reports_an_importing_item_as_queued() {
         for tracked in IMPORT_STATES {
             let mut fake = Fake::new();
-            fake.queue = vec![queue_item("downloading", Some(tracked), 4096.0, 1024.0)];
+            fake.queue = vec![queue_item(1, "downloading", Some(tracked), 4096.0, 1024.0)];
             let mut state = state(Some(21), Some(0));
 
             let outcome = advance(
@@ -1407,7 +1548,13 @@ mod tests {
     #[test]
     fn reports_a_finished_transfer_waiting_for_import_as_queued() {
         let mut fake = Fake::new();
-        fake.queue = vec![queue_item("downloading", Some("downloading"), 4096.0, 0.0)];
+        fake.queue = vec![queue_item(
+            1,
+            "downloading",
+            Some("downloading"),
+            4096.0,
+            0.0,
+        )];
         let mut state = state(Some(21), Some(0));
 
         let outcome = advance(
@@ -1427,6 +1574,7 @@ mod tests {
     fn reports_a_transfer_without_bytes_yet_as_queued() {
         let mut fake = Fake::new();
         fake.queue = vec![queue_item(
+            1,
             "downloading",
             Some("downloading"),
             4096.0,
@@ -1517,6 +1665,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(state.album_id, Some(21));
+        assert!(state.monitored_album);
         assert_eq!(
             fake.calls(),
             vec![
@@ -1530,6 +1679,100 @@ mod tests {
             ]
         );
         assert_eq!(outcome, Advance::Queued(None));
+    }
+
+    #[test]
+    fn cancels_the_queue_items_then_unmonitors_the_album() {
+        let mut fake = Fake::new();
+        fake.queue = vec![
+            queue_item(1, "downloading", Some("downloading"), 4096.0, 1024.0),
+            queue_item(2, "queued", Some("queued"), 8192.0, 8192.0),
+        ];
+
+        cancel(&fake, Some(&monitored_state()), &token()).unwrap();
+
+        assert_eq!(fake.removed(), vec![(1, true), (2, true)]);
+        assert_eq!(fake.unmonitored(), vec![21]);
+        assert_eq!(
+            fake.calls(),
+            vec![
+                "queue",
+                "remove_queue_item",
+                "remove_queue_item",
+                "unmonitor_album",
+            ]
+        );
+    }
+
+    #[test]
+    fn cancel_is_a_no_op_without_state() {
+        let fake = Fake::new();
+
+        cancel(&fake, None, &token()).unwrap();
+
+        assert!(fake.calls().is_empty());
+        assert!(fake.removed().is_empty());
+        assert!(fake.unmonitored().is_empty());
+    }
+
+    #[test]
+    fn cancel_keeps_an_album_the_plugin_did_not_monitor() {
+        let mut fake = Fake::new();
+        fake.queue = vec![queue_item(
+            1,
+            "downloading",
+            Some("downloading"),
+            4096.0,
+            1024.0,
+        )];
+
+        cancel(&fake, Some(&state(Some(21), Some(0))), &token()).unwrap();
+
+        assert_eq!(fake.removed(), vec![(1, true)]);
+        assert!(fake.unmonitored().is_empty());
+    }
+
+    #[test]
+    fn cancel_unmonitors_when_a_queue_item_is_already_gone() {
+        let mut fake = Fake::new();
+        fake.fail_queue_removal = true;
+        fake.queue = vec![queue_item(
+            1,
+            "downloading",
+            Some("downloading"),
+            4096.0,
+            1024.0,
+        )];
+
+        let error = cancel(&fake, Some(&monitored_state()), &token()).unwrap_err();
+
+        assert!(matches!(error, ProviderError::NotFound));
+        assert_eq!(fake.unmonitored(), vec![21]);
+    }
+
+    #[test]
+    fn cancel_reports_a_failed_unmonitor() {
+        let mut fake = Fake::new();
+        fake.fail_unmonitor = true;
+
+        let error = cancel(&fake, Some(&monitored_state()), &token()).unwrap_err();
+
+        assert!(matches!(error, ProviderError::Unavailable(_)));
+        assert_eq!(fake.unmonitored(), vec![21]);
+    }
+
+    #[test]
+    fn cancel_finds_the_album_when_the_state_arrived_before_lidarr_listed_it() {
+        let fake = Fake::new();
+        let state = DownloadState {
+            album_id: None,
+            ..monitored_state()
+        };
+
+        cancel(&fake, Some(&state), &token()).unwrap();
+
+        assert_eq!(fake.unmonitored(), vec![21]);
+        assert!(fake.calls().contains(&"albums_by_foreign_id".to_string()));
     }
 
     #[test]

@@ -63,6 +63,19 @@ pub(crate) trait LidarrApi {
     /// Reads the queue items of one album.
     fn queue(&self, album_id: u32) -> Result<Vec<lidarr::QueueItem>, ProviderError>;
 
+    /// Removes one queue item, optionally along with the download client's
+    /// copy of the download.
+    ///
+    /// # Parameters
+    ///
+    /// - `id`: Lidarr's id of the queue item.
+    /// - `remove_from_client`: whether Lidarr also removes the download from
+    ///   its download client, which stops a transfer in flight.
+    fn remove_queue_item(&self, id: u32, remove_from_client: bool) -> Result<(), ProviderError>;
+
+    /// Clears one album's monitored flag.
+    fn unmonitor_album(&self, album_id: u32) -> Result<(), ProviderError>;
+
     /// Reads the tracks of one album in Lidarr's library.
     fn tracks(&self, album_id: u32) -> Result<Vec<lidarr::Track>, ProviderError>;
 
@@ -186,6 +199,21 @@ impl Client {
     /// when the body cannot be serialized.
     fn post_ok<B: serde::Serialize>(&self, path: &str, body: &B) -> Result<(), ProviderError> {
         let response = self.send(&self.with_body("POST", path, body)?)?;
+        require_success(&response)
+    }
+
+    /// Sends a DELETE request, ignoring the response body.
+    ///
+    /// # Parameters
+    ///
+    /// - `path`: the API path, including any query string.
+    ///
+    /// # Errors
+    ///
+    /// Returns the error the host reports, and the mapped status of a failing
+    /// response.
+    fn delete(&self, path: &str) -> Result<(), ProviderError> {
+        let response = self.send(&self.request("DELETE", path))?;
         require_success(&response)
     }
 
@@ -324,6 +352,22 @@ impl LidarrApi for Client {
             .into_iter()
             .filter(|item| item.album_id == Some(album_id))
             .collect())
+    }
+
+    fn remove_queue_item(&self, id: u32, remove_from_client: bool) -> Result<(), ProviderError> {
+        self.delete(&format!(
+            "/api/v1/queue/{id}?removeFromClient={remove_from_client}&blocklist=false"
+        ))
+    }
+
+    fn unmonitor_album(&self, album_id: u32) -> Result<(), ProviderError> {
+        self.put_json(
+            "/api/v1/album/monitor",
+            &lidarr::AlbumsMonitored {
+                album_ids: vec![album_id],
+                monitored: false,
+            },
+        )
     }
 
     fn tracks(&self, album_id: u32) -> Result<Vec<lidarr::Track>, ProviderError> {

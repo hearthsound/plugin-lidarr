@@ -13,8 +13,11 @@
 //! wanted tracks the release's own tracklist holds when Lidarr sent one.
 //!
 //! The plugin never deletes or modifies a file Lidarr created, and it never
-//! cancels Lidarr's own queue: `cancel-download` only forgets the plugin's
-//! state, so an administrator's download keeps running.
+//! deletes an artist or an album from Lidarr's library. `cancel-download`
+//! undoes the two things the plugin itself did: it removes the album's queue
+//! items with Lidarr's download-client copy, so an in-flight transfer stops,
+//! and it clears the album's monitored flag when the plugin set it. An artist
+//! the plugin had to add arrives unmonitored, so nothing of it stays watched.
 //!
 //! The import root must expose the files of Lidarr's root folder, and it must
 //! use mode `link` so the server imports them by hardlink and leaves Lidarr's
@@ -291,10 +294,45 @@ impl AcquisitionGuest for Lidarr {
             return;
         };
 
-        // Lidarr's queue and files belong to the administrator, so cancelling
-        // only forgets the plugin's own state.
-        host::kv::delete(&download_key(&token.key));
+        let key = download_key(&token.key);
+
+        // The state names what the plugin started in Lidarr, so a cancel that
+        // cannot read it has nothing to undo; the entry is dropped either way,
+        // and a failed cancel is best effort: the WIT call cannot report one.
+        if let Err(error) = cancel_in_lidarr(&key, &token) {
+            hearthsound_plugin::warn!(
+                "could not cancel `{}` in Lidarr: {}",
+                token.album_title,
+                api::describe(&error)
+            );
+        }
+
+        host::kv::delete(&key);
     }
+}
+
+/// Cancels one download in Lidarr from the state the store holds for it.
+///
+/// # Parameters
+///
+/// - `key`: the store key of the download's state.
+/// - `token`: the download's token.
+///
+/// # Returns
+///
+/// `Ok(())` once the queue items and the monitored flag are Lidarr's concern
+/// no longer, including when the store holds no state for the download.
+///
+/// # Errors
+///
+/// Returns [`ProviderError::InvalidConfig`] when this instance's configuration
+/// does not deserialize, the error of a failed store read, and the first error
+/// Lidarr reported.
+fn cancel_in_lidarr(key: &str, token: &download::DownloadToken) -> Result<(), ProviderError> {
+    let config = configured()?;
+    let state: Option<download::DownloadState> = kv::get_json(key)?;
+
+    download::cancel(&api::Client::new(&config), state.as_ref(), token)
 }
 
 hearthsound_plugin::export_acquisition_provider!(Lidarr);
