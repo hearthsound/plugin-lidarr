@@ -7,8 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-25
+
 ### Changed
 
+- Build against the `hearthsound:plugin@0.4.0` API (plugin-sdk v0.4.0).
 - A download reports `running` whenever a queue item is downloading and bytes
   have moved, instead of only when the byte count advanced since the previous
   poll. A poll interval shorter than one chunk, or the first poll of a live
